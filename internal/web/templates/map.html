@@ -21,76 +21,114 @@
     <button class="btn sm" type="button" id="map-retry" hidden>重试</button>
   </div>
 
-  <div class="map-panel">
+  <div class="map-panel" id="map-panel">
+    {{/* 窄屏折叠开关：面板在手机上铺满整行、还盖住小半个地图，默认收成这一条。
+         桌面端它 display:none，面板照旧常开。窄屏的计数只在这里（表单里那行被隐藏），
+         展开/收起都要靠它显示当前筛出多少个点。 */}}
+    <button class="panel-fold" id="panel-fold" type="button" aria-controls="filter-form" aria-expanded="true">
+      <span>筛选</span>
+      <span class="pf-n" id="pf-count">{{num (len .Points)}} 个地点</span>
+      <span class="pf-c" id="pf-caret" aria-hidden="true">▾</span>
+    </button>
     <form id="filter-form" method="get" action="/map">
       <h3>时间范围</h3>
-      <div class="chips" style="margin-bottom:10px">
+      <div class="chips presets">
         {{range .Presets}}<a class="chip {{if .Active}}on{{end}}" href="{{$.RangeLink .From .To}}">{{.Label}}</a>{{end}}
-        {{if .IsAdmin}}
-        <a class="chip {{if .ShowHomeWork}}on{{end}}" href="{{.HWLink}}" title="仅登录后的你自己可见，访客看不到这两类记录">含家/工作</a>
-        {{end}}
       </div>
+      {{if .IsAdmin}}
+      {{/* 「含家/工作」原来跟在预设行末尾，而窄屏预设行改成单行横滑后它被滑到屏幕外、
+           没有任何提示（站长实测发现）。挪出来单独一行——它本来也不是时间段预设，
+           而是「这两类记录给不给自己看」的开关。 */}}
+      <div class="chips hw-row">
+        <a class="chip {{if .ShowHomeWork}}on{{end}}" href="{{.HWLink}}" title="仅登录后的你自己可见，访客看不到这两类记录">含家/工作</a>
+      </div>
+      {{end}}
       <div class="row" style="gap:8px;margin-bottom:10px">
         <input type="date" name="from" value="{{.From}}" style="flex:1">
         <input type="date" name="to" value="{{.To}}" style="flex:1">
       </div>
 
       {{if .Activities}}
-      <h3>地点类型</h3>
-      <div class="chips" style="margin-bottom:10px">
-        {{range $i, $a := .Activities}}{{if or (lt $i 12) ($.IsAct $a.ID)}}
-        <a class="chip {{if $.IsAct $a.ID}}on{{end}}" href="{{$.ActLink $a.ID}}">
-          <span class="dot" style="background:{{colorof $a.Color}}"></span>{{$a.Name}}
-        </a>
-        {{end}}{{end}}
-      </div>
-      {{if gt (len .Activities) 12}}
-      <details class="more-types">
-        <summary>展开其余 {{len .Activities}} 个类型</summary>
-        <div class="chips">
-          {{range $i, $a := .Activities}}{{if and (ge $i 12) (not ($.IsAct $a.ID))}}
-          <a class="chip" href="{{$.ActLink $a.ID}}"><span class="dot" style="background:{{colorof $a.Color}}"></span>{{$a.Name}}</a>
+      {{/* 12 个类型标签在窄屏要占两百多像素，是面板里最高的一块，所以整块做成可折叠：
+           标题里带上已选的类型名，收起时也知道当前选了什么。默认展开/收起由下面的脚本按视口定。 */}}
+      <details class="type-fold" id="type-fold" open>
+        <summary>
+          <span>地点类型</span>
+          <span class="tf-sel">{{if .ActivityIDs}}{{range $i, $a := .Activities}}{{if $.IsAct $a.ID}}{{$a.Name}} {{end}}{{end}}{{else}}全部{{end}}</span>
+          <span class="tf-arrow" aria-hidden="true">▸</span>
+        </summary>
+        <div class="chips" style="margin-bottom:10px">
+          {{range $i, $a := .Activities}}{{if or (lt $i 12) ($.IsAct $a.ID)}}
+          <a class="chip {{if $.IsAct $a.ID}}on{{end}}" href="{{$.ActLink $a.ID}}">
+            <span class="dot" style="background:{{colorof $a.Color}}"></span>{{$a.Name}}
+          </a>
           {{end}}{{end}}
         </div>
+        {{if gt (len .Activities) 12}}
+        <details class="more-types">
+          <summary>展开其余 {{len .Activities}} 个类型</summary>
+          <div class="chips">
+            {{range $i, $a := .Activities}}{{if and (ge $i 12) (not ($.IsAct $a.ID))}}
+            <a class="chip" href="{{$.ActLink $a.ID}}"><span class="dot" style="background:{{colorof $a.Color}}"></span>{{$a.Name}}</a>
+            {{end}}{{end}}
+          </div>
+        </details>
+        {{end}}
       </details>
       {{end}}
-      {{end}}
 
-      <h3>其它条件</h3>
-      <div class="row" style="gap:8px;margin-bottom:10px">
-        <select name="city" style="flex:1">
-          <option value="">全部城市</option>
-          {{range .CityList}}<option value="{{.}}" {{if eq . $.City}}selected{{end}}>{{.}}</option>{{end}}
-        </select>
-        <select name="tag" style="flex:1">
-          <option value="0">全部标签</option>
-          {{range .TagOptions}}<option value="{{.ID}}" {{if eq .ID $.TagID}}selected{{end}}>{{.Name}}</option>{{end}}
-        </select>
-      </div>
-      <div class="row" style="gap:8px;margin-bottom:12px">
-        <select name="min" style="flex:1">
-          <option value="0" {{if eq .MinDwell 0}}selected{{end}}>不限停留</option>
-          <option value="5" {{if eq .MinDwell 5}}selected{{end}}>≥ 5 分钟</option>
-          <option value="15" {{if eq .MinDwell 15}}selected{{end}}>≥ 15 分钟</option>
-          <option value="30" {{if eq .MinDwell 30}}selected{{end}}>≥ 30 分钟</option>
-          <option value="60" {{if eq .MinDwell 60}}selected{{end}}>≥ 1 小时</option>
-        </select>
-        <input type="text" name="q" value="{{.Keyword}}" placeholder="关键词" style="flex:1">
-      </div>
+      {{/* 窄屏把「其它条件 + 图层开关」整块收进 details：这两块加起来近 240px，不收的话
+           展开后面板仍要高出一屏。默认展开/收起由下面的脚本按视口定（桌面展开、窄屏收起）。
+           标题里带上已生效的条件，收起时也知道当前不是「无条件」。
+           act / hw 这两个 hidden 留在 details 外面——表单要始终带上它们。 */}}
+      <details class="adv-fold" id="adv-fold">
+        <summary>
+          <span>更多筛选</span>
+          <span class="tf-sel">{{if or .City .Keyword .TagID (gt .MinDwell 0)}}{{if .City}}{{.City}} {{end}}{{range .TagOptions}}{{if and (eq .ID $.TagID) (ne .ID 0)}}{{.Name}} {{end}}{{end}}{{if gt .MinDwell 0}}停留≥{{.MinDwell}}分 {{end}}{{if .Keyword}}“{{.Keyword}}”{{end}}{{else}}城市 / 标签 / 停留 / 关键词{{end}}</span>
+          <span class="tf-arrow" aria-hidden="true">▸</span>
+        </summary>
+
+        <h3>其它条件</h3>
+        <div class="row" style="gap:8px;margin-bottom:10px">
+          <select name="city" style="flex:1">
+            <option value="">全部城市</option>
+            {{range .CityList}}<option value="{{.}}" {{if eq . $.City}}selected{{end}}>{{.}}</option>{{end}}
+          </select>
+          <select name="tag" style="flex:1">
+            <option value="0">全部标签</option>
+            {{range .TagOptions}}<option value="{{.ID}}" {{if eq .ID $.TagID}}selected{{end}}>{{.Name}}</option>{{end}}
+          </select>
+        </div>
+        <div class="row" style="gap:8px;margin-bottom:12px">
+          <select name="min" style="flex:1">
+            <option value="0" {{if eq .MinDwell 0}}selected{{end}}>不限停留</option>
+            <option value="5" {{if eq .MinDwell 5}}selected{{end}}>≥ 5 分钟</option>
+            <option value="15" {{if eq .MinDwell 15}}selected{{end}}>≥ 15 分钟</option>
+            <option value="30" {{if eq .MinDwell 30}}selected{{end}}>≥ 30 分钟</option>
+            <option value="60" {{if eq .MinDwell 60}}selected{{end}}>≥ 1 小时</option>
+          </select>
+          <input type="text" name="q" value="{{.Keyword}}" placeholder="关键词" style="flex:1">
+        </div>
+
+        <div class="chips" style="margin-bottom:12px">
+          <label class="chip" style="user-select:none"><input type="checkbox" id="track-toggle" style="accent-color:var(--accent)"> 行程轨迹</label>
+          <label class="chip" style="user-select:none"><input type="checkbox" id="heat-toggle" style="accent-color:var(--accent)"> 到访热力</label>
+          <label class="chip" style="user-select:none"><input type="checkbox" id="city-toggle" style="accent-color:var(--accent)"> 城市聚合</label>
+          <label class="chip" style="user-select:none"><input type="checkbox" id="gpx-toggle" style="accent-color:var(--accent)"> GPX 轨迹</label>
+        </div>
+      </details>
+
       {{range .ActivityIDs}}<input type="hidden" name="act" value="{{.}}">{{end}}
       {{if .ShowHomeWork}}<input type="hidden" name="hw" value="1">{{end}}
 
-      <div class="row">
+      {{/* 计数：桌面端就留在表单里（折叠条在桌面 display:none，没有别处可放）；
+           窄屏这行整行隐藏，改由粘顶条上的 #pf-count 承担——窄屏差的正是这一行的高度。 */}}
+      <div class="map-count muted">当前显示 <b id="pt-count">{{num (len .Points)}}</b> 个地点</div>
+
+      <div class="row filter-actions">
         <button class="btn" type="submit" style="flex:1">查询</button>
         <a class="btn" href="/map">重置</a>
       </div>
-      <div class="chips" style="margin-top:10px">
-        <label class="chip" style="user-select:none"><input type="checkbox" id="track-toggle" style="accent-color:var(--accent)"> 行程轨迹</label>
-        <label class="chip" style="user-select:none"><input type="checkbox" id="heat-toggle" style="accent-color:var(--accent)"> 到访热力</label>
-        <label class="chip" style="user-select:none"><input type="checkbox" id="city-toggle" style="accent-color:var(--accent)"> 城市聚合</label>
-        <label class="chip" style="user-select:none"><input type="checkbox" id="gpx-toggle" style="accent-color:var(--accent)"> GPX 轨迹</label>
-      </div>
-      <div class="muted" style="margin-top:9px;font-size:12px">当前显示 <b id="pt-count">{{num (len .Points)}}</b> 个地点</div>
     </form>
   </div>
 
@@ -105,6 +143,45 @@
 </div>
 
 <script>
+// 筛选面板折叠：状态同步执行，免得手机上先闪一下整块面板再收起。
+// 只切换 class，具体收起后什么样由 CSS 的窄屏媒体查询决定（桌面端按钮本身就不显示）。
+(function () {
+  var panel = document.getElementById('map-panel');
+  var btn = document.getElementById('panel-fold');
+  var caret = document.getElementById('pf-caret');
+  if (!panel || !btn) return;
+
+  var KEY = 'rond-map-fold';
+  var saved = null;
+  try { saved = localStorage.getItem(KEY); } catch (e) { /* 隐私模式禁用了 localStorage，忽略 */ }
+
+  function apply(collapsed) {
+    panel.classList.toggle('collapsed', collapsed);
+    btn.setAttribute('aria-expanded', String(!collapsed));
+    btn.title = collapsed ? '展开筛选' : '收起筛选';
+    if (caret) caret.textContent = collapsed ? '▸' : '▾';
+  }
+  // 没记过状态时窄屏默认收起——「全部」这种宽区间能有一两百个点，
+  // 面板一上来就占掉 50% 的屏幕，地图反而看不清。
+  var desk = window.matchMedia('(min-width: 621px)');
+  apply(saved === null ? !desk.matches : saved === '1');
+
+  // 地点类型 / 更多筛选同理：窄屏收起（两块各占两百多像素），桌面有地方就一直展开。
+  // 不记本地：窄屏上点类型或改筛选会整页跳转，重载后本就该收回去。
+  ['type-fold', 'adv-fold'].forEach(function (id) {
+    var d = document.getElementById(id);
+    if (d) d.open = desk.matches;
+  });
+
+  btn.addEventListener('click', function () {
+    var collapsed = !panel.classList.contains('collapsed');
+    apply(collapsed);
+    try { localStorage.setItem(KEY, collapsed ? '1' : '0'); } catch (e) { /* 同上 */ }
+  });
+})();
+</script>
+
+<script>
   window.addEventListener('load', function () {
     // 首屏不带地点数据（全量内联会让 HTML 膨胀到 ~58KB），
     // 页面先出壳，地点走 /api/points 并行拉取后再填充。
@@ -115,6 +192,13 @@
     var statusBox = document.getElementById('map-status');
     var statusText = document.getElementById('map-status-text');
     var retryBtn = document.getElementById('map-retry');
+    var pfCount = document.getElementById('pf-count');
+
+    // 计数两处同步：桌面端表单里那行（窄屏被隐藏）、窄屏粘顶条上的 #pf-count
+    function setCount(n) {
+      if (ptCount) ptCount.textContent = n;
+      pfCount.textContent = n + ' 个地点';
+    }
 
     function qs() {
       return new URLSearchParams(new FormData(form)).toString();
@@ -151,7 +235,7 @@
         // 先交给时间轴：它自己会在「有时间的点」上做过滤再决定画什么
         setupTimeline(pts);
         window.rondMap.setPoints(pts);
-        ptCount.textContent = pts.length;
+        setCount(pts.length);
         hideStatus();
         return true;
       }).catch(function (err) {

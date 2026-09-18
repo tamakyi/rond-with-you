@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"net/http"
 	"sort"
 	"strconv"
@@ -70,6 +71,15 @@ func (s *Server) pageBase(r *http.Request, nav, title string) (Page, error) {
 
 	if p.Activities, err = s.q.Activities(ctx, ds.ID); err != nil {
 		return p, err
+	}
+	// 类型标签上的次数要跟着当前筛选走（时间 / 城市 / 标签 / 区域…），否则选了城市之后
+	// 数字仍是全库的。算失败就保留上面那份全量数字：一个角标不值得把整页搞成 500。
+	if counts, cerr := s.q.ActivityCounts(ctx, s.filterOf(p)); cerr != nil {
+		log.Printf("类型分面计数失败: %v", cerr)
+	} else {
+		for i := range p.Activities {
+			p.Activities[i].Count = counts[p.Activities[i].ID]
+		}
 	}
 	if p.TagOptions, err = s.q.Tags(ctx, ds.ID); err != nil {
 		return p, err

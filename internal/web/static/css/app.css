@@ -305,9 +305,39 @@ table.tb tr.located td, table.tb tr.located:hover td { background: var(--accent-
 .map-panel {
   position: absolute; top: 12px; left: 12px; z-index: 400; width: 286px; max-height: calc(100% - 24px);
   overflow-y: auto; background: var(--glass-strong); backdrop-filter: blur(8px);
-  border: 1px solid var(--line); border-radius: var(--radius); padding: 13px; box-shadow: var(--shadow);
+  border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow);
 }
+/* 内边距挂在表单上，不挂面板：窄屏的折叠条与操作行要 sticky 到面板的**内边缘**，
+   面板自己带 padding 的话它们只能粘在内容区边界上，边上会留一条缝让滚动内容穿过去
+   （实测：折叠条粘在内容区顶、上方 13px 仍能看到内容滚过）。 */
+#filter-form { padding: 13px; }
+/* 时间范围预设行：原来靠行内 style 加的下边距，挪到类上，好让窄屏媒体查询能一起改。 */
+.map-panel .presets { margin-bottom: 10px; }
+/* 「含家/工作」单独一行（不属于时间段预设）。窄屏预设行是单行横滑的，
+   它留在里面会被滑到屏幕外；单独一行上下各留 10px，读起来也像另一个开关。 */
+.map-panel .hw-row { margin-bottom: 10px; }
 .map-panel h3 { font-size: 13px; margin-bottom: 9px; color: var(--text-2); }
+/* 筛选面板的折叠开关：桌面上面板只占 286px、不碍事，按钮直接不显示，只在窄屏出现 */
+.panel-fold { display: none; }
+/* 筛选面板里可折叠的两块（地点类型 / 更多筛选）：这两块在窄屏各占两百多像素，
+   是面板高度的大头。默认值在 map.html 的脚本里按视口定（桌面展开、窄屏收起）；
+   收起时标题里显示已选/已生效的那几项，否则收起后就不知道当前选了什么。 */
+.type-fold > summary, .adv-fold > summary {
+  list-style: none; display: flex; align-items: center; gap: 6px;
+  font-size: 13px; color: var(--text-2); cursor: pointer; padding: 2px 0 8px;
+}
+.type-fold > summary::-webkit-details-marker, .adv-fold > summary::-webkit-details-marker { display: none; }
+.type-fold > summary:hover, .adv-fold > summary:hover { color: var(--accent); }
+.type-fold > summary .tf-sel, .adv-fold > summary .tf-sel {
+  flex: 0 1 auto; min-width: 0; color: var(--text-3);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.type-fold > summary .tf-arrow, .adv-fold > summary .tf-arrow { flex: 0 0 auto; margin-left: auto; font-size: 11px; color: var(--text-3); }
+.type-fold[open] > summary .tf-arrow, .adv-fold[open] > summary .tf-arrow { transform: rotate(90deg); }
+/* 展开后标签行/控件自己就说明了当前值，标题里那份就不必再占一行 */
+.type-fold[open] > summary .tf-sel, .adv-fold[open] > summary .tf-sel { display: none; }
+/* 「更多筛选」里的 h3 是二级标题，别跟折叠标题撞成一样大 */
+.adv-fold > h3 { font-size: 12.5px; color: var(--text-3); margin-bottom: 8px; }
 .map-legend {
   /* bottom 让开右下角那行底图版权（约 15px 高），否则两者会叠在一起 */
   position: absolute; bottom: 26px; right: 12px; z-index: 400; background: var(--glass-strong);
@@ -417,8 +447,44 @@ table.tb tr.located td, table.tb tr.located:hover td { background: var(--accent-
 .map-status .btn { border-color: rgba(255,255,255,.35); background: rgba(255,255,255,.12); color: #fff; flex: 0 0 auto; }
 .map-status .btn:hover { background: rgba(255,255,255,.22); }
 @media (max-width: 620px) {
-  .map-panel { left: 8px; right: 8px; width: auto; max-height: 44%; top: 8px; }
+  /* 上限 50%（原 44%）：折叠条本身占 44px，不加这 6% 的话展开后能看到的筛选内容
+     反而比改动前更少。50% 刚好把那一条的高度补回来。 */
+  .map-panel { left: 8px; right: 8px; width: auto; max-height: 50%; top: 8px; }
   .map-legend { display: none; }
+  /* 窄屏上面板铺满整行、最多能吃掉 50% 的屏幕，所以默认收起成一条：
+     只剩「筛选 + 数量 + 箭头」约 52px 高，想改条件再点开。
+     「筛选」两字与箭头之间的数量在展开时也保留——表单里那行重复的计数已去掉，
+     两块状态共用这一个数字，展开/收起都能看到当前筛出多少个点。
+     展开时它 sticky 在面板顶部：表单比可视窗高，滚到下面之后还得能点回来收起。
+     不透明底是因为滚动内容会从它下面穿过（面板本身已无内边距，它天然铺满整行）。 */
+  .panel-fold {
+    /* width:100% 不能省：这是 <button>，Chrome 下 display:flex + width:auto 仍是「收缩到内容宽」，
+       于是它只盖住左边一小条，右边的内容会从粘性条旁边穿过去。 */
+    display: flex; align-items: center; gap: 8px; width: 100%; min-height: 44px;
+    padding: 0 13px; border: 0; background: var(--glass-strong); color: var(--text-2);
+    font: inherit; font-size: 13.5px; font-weight: 500; text-align: left; cursor: pointer;
+    position: sticky; top: 0; z-index: 2;
+  }
+  .map-panel:not(.collapsed) .panel-fold { border-bottom: 1px solid var(--line); }
+  .panel-fold .pf-n { color: var(--text-3); font-size: 12px; font-weight: 400; }
+  .panel-fold .pf-c { margin-left: auto; padding-left: 4px; font-size: 12px; color: var(--text-3); }
+  .panel-fold:hover { color: var(--text); }
+  .panel-fold:hover .pf-c { color: var(--text); }
+  /* 「查询 / 重置」粘在面板底部：展开后表单 600+px、可视窗不到 400px，
+     不粘的话每改一次条件都要先滚到底才点得到查询。它必须是表单最后一个元素，
+     否则粘不住（实测后面还挂着内容时，底部会跟着内容一起往上跑）。 */
+  .filter-actions {
+    position: sticky; bottom: 0; z-index: 1;
+    margin: 0 -13px -13px; padding: 9px 13px;
+    background: var(--glass-strong); border-top: 1px solid var(--line);
+  }
+  .map-panel.collapsed { max-height: none; padding: 4px 0; }
+  .map-panel.collapsed #filter-form { display: none; }
+  /* 预设区间在窄屏会折成两三行（7 个预设 +「含家/工作」），单行横滑省下约 30~60px。 */
+  .map-panel .presets { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
+  .map-panel .presets::-webkit-scrollbar { display: none; }
+  .map-panel .presets > .chip { flex: 0 0 auto; }
+  .map-panel .map-count { display: none; }
 }
 .map-preview { height: 320px; border-radius: 8px; overflow: hidden; border: 1px solid var(--line); }
 

@@ -328,6 +328,34 @@ func (d DB) Activities(ctx context.Context, datasetID int64) ([]ActivityStat, er
 	return out, rows.Err()
 }
 
+// ActivityCounts 返回「类型 → 到访次数」，给筛选器上的类型标签显示数字用。
+//
+// 用的是**除类型自身以外**的全部当前条件。以前标签上的数字取自 Activities(datasetID)、
+// 一个条件都不带，选了城市之后还是全库的数（站长实测反馈：「这个城市下家/工作各去过
+// 几次」看不出来）；但也不能把 ActivityIDs 一起套进去——那样没选中的类型会全变成 0，
+// 标签就失去意义了。
+// 区域限制照常生效（Regions 在 visitsWhere 里），访客不该从计数反推被隐藏区域的量级。
+func (d DB) ActivityCounts(ctx context.Context, f Filter) (map[int64]int, error) {
+	f.ActivityIDs = nil
+	w := f.visitsWhere(0)
+	rows, err := d.QueryContext(ctx,
+		`SELECT COALESCE(v.activity_id,0), count(*) FROM visits v`+w.SQL()+` GROUP BY 1`, w.args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := map[int64]int{}
+	for rows.Next() {
+		var id int64
+		var n int
+		if err := rows.Scan(&id, &n); err != nil {
+			return nil, err
+		}
+		out[id] = n
+	}
+	return out, rows.Err()
+}
+
 // ---------- 城市 / 省份 ----------
 
 type CityStat struct {

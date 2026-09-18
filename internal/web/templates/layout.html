@@ -1,0 +1,295 @@
+{{define "nav"}}
+<nav class="nav">
+  <div class="nav-inner">
+    <a class="brand" href="/" title="{{.Settings.SiteTitle}}"><span class="avatar">{{.Settings.OwnerAvatar}}</span><span class="t">{{.Settings.SiteTitle}}</span></a>
+    <div class="nav-links">
+      <a href="/" class="{{if eq .Nav "home"}}on{{end}}">主页</a>
+      {{if .Settings.HasPage "map"}}<a href="/map" class="{{if eq .Nav "map"}}on{{end}}">地图</a>{{end}}
+      {{if .Settings.HasPage "places"}}<a href="/places" class="{{if eq .Nav "places"}}on{{end}}">地点</a>{{end}}
+      {{if .Settings.HasPage "timeline"}}<a href="/timeline" class="{{if eq .Nav "timeline"}}on{{end}}">时间线</a>{{end}}
+      {{if .Settings.HasPage "stats"}}<a href="/stats" class="{{if eq .Nav "stats"}}on{{end}}">统计</a>{{end}}
+      {{if .HasTopics}}<a href="/topics" class="{{if eq .Nav "topics"}}on{{end}}">专题</a>{{end}}
+      {{if .Settings.HasPage "report"}}<a href="/report" class="{{if eq .Nav "report"}}on{{end}}">报告</a>{{end}}
+    </div>
+    <div class="nav-right">
+      {{if .User}}
+        <span class="who">{{.User.DisplayName}}</span>
+        <a class="btn sm" href="/admin"><span class="hide-sm">后台</span><span class="only-sm">后台</span></a>
+        <form method="post" action="/admin/logout" style="display:inline"><button class="btn sm" type="submit">退出</button></form>
+      {{else}}
+        <a class="btn sm" href="/admin"><span class="hide-sm">登录后台</span><span class="only-sm">登录</span></a>
+      {{end}}
+    </div>
+  </div>
+</nav>
+{{end}}
+
+{{define "filters"}}
+<form class="card" method="get" action="{{.FilterBase}}" id="filters-form">
+  <div class="chips" style="margin-bottom:12px">
+    {{range .Presets}}<a class="chip {{if .Active}}on{{end}}" href="{{$.RangeLink .From .To}}">{{.Label}}</a>{{end}}
+    <span class="chip" style="background:transparent;color:var(--text-3)">{{.RangeLabel}}</span>
+    {{if .IsAdmin}}
+    <a class="chip {{if .ShowHomeWork}}on{{end}}" href="{{.HWLink}}" title="仅登录后的你自己可见，访客看不到这两类记录">含家/工作</a>
+    {{end}}
+  </div>
+
+  {{/* 已选条件：以前只能靠「重置」全清，想撤掉其中一个得手动改回「全部」再点应用 */}}
+  {{$chips := .ActiveChips}}
+  {{if $chips}}
+  <div class="chips active-filters">
+    <span class="af-label">已选</span>
+    {{range $chips}}<a class="chip on" href="{{.RemoveURL}}" title="去掉这个条件">{{.Label}}<span class="af-x">×</span></a>{{end}}
+    <a class="chip af-clear" href="{{.FilterBase}}">全部清空</a>
+  </div>
+  {{end}}
+
+  {{if .Activities}}
+  <div class="chips" style="margin-bottom:{{if gt (len .Activities) 14}}8{{else}}12{{end}}px">
+    {{range $i, $a := .Activities}}{{if or (lt $i 14) ($.IsAct $a.ID)}}
+      <a class="chip {{if $.IsAct $a.ID}}on{{end}}" href="{{$.ActLink $a.ID}}" title="{{num $a.Count}} 次到访">
+        <span class="dot" style="background:{{colorof $a.Color}}"></span>{{$a.Name}}
+        <span class="muted">{{num $a.Count}}</span>
+      </a>
+    {{end}}{{end}}
+  </div>
+  {{if gt (len .Activities) 14}}
+  <details class="more-types">
+    <summary>展开其余 {{len .Activities}} 个类型</summary>
+    <div class="chips">
+      {{range $i, $a := .Activities}}{{if and (ge $i 14) (not ($.IsAct $a.ID))}}
+        <a class="chip" href="{{$.ActLink $a.ID}}">
+          <span class="dot" style="background:{{colorof $a.Color}}"></span>{{$a.Name}}
+          <span class="muted">{{num $a.Count}}</span>
+        </a>
+      {{end}}{{end}}
+    </div>
+  </details>
+  {{end}}
+  {{end}}
+
+  <div class="row" style="align-items:flex-end">
+    <label class="f" style="flex:1 1 140px;margin-bottom:0"><span>起始日期</span><input type="date" name="from" value="{{.From}}"></label>
+    <label class="f" style="flex:1 1 140px;margin-bottom:0"><span>结束日期</span><input type="date" name="to" value="{{.To}}"></label>
+    <label class="f" style="flex:1 1 130px;margin-bottom:0"><span>城市</span>
+      <select name="city">
+        <option value="">全部城市</option>
+        {{range .CityList}}<option value="{{.}}" {{if eq . $.City}}selected{{end}}>{{.}}</option>{{end}}
+      </select>
+    </label>
+    <label class="f" style="flex:1 1 130px;margin-bottom:0"><span>标签</span>
+      <select name="tag">
+        <option value="0">全部标签</option>
+        {{range .TagOptions}}<option value="{{.ID}}" {{if eq .ID $.TagID}}selected{{end}}>{{.Name}}</option>{{end}}
+      </select>
+    </label>
+    <label class="f" style="flex:1 1 120px;margin-bottom:0"><span>最短停留</span>
+      <select name="min">
+        <option value="0" {{if eq .MinDwell 0}}selected{{end}}>不限</option>
+        <option value="5" {{if eq .MinDwell 5}}selected{{end}}>≥ 5 分钟</option>
+        <option value="15" {{if eq .MinDwell 15}}selected{{end}}>≥ 15 分钟</option>
+        <option value="30" {{if eq .MinDwell 30}}selected{{end}}>≥ 30 分钟</option>
+        <option value="60" {{if eq .MinDwell 60}}selected{{end}}>≥ 1 小时</option>
+      </select>
+    </label>
+    <label class="f" style="flex:2 1 180px;margin-bottom:0"><span>关键词</span><input type="text" name="q" value="{{.Keyword}}" placeholder="地点 / 城市 / 类型，回车即可"></label>
+    <div style="display:flex;gap:8px">
+      {{/* 下拉与日期改动即生效（见下面的脚本）；这个按钮是给「关键词」和
+          关了 JS 的浏览器兜底的，所以不再是主按钮样式 */}}
+      <button class="btn" type="submit">查询</button>
+      <a class="btn" href="{{.FilterBase}}">重置</a>
+    </div>
+  </div>
+  {{range .ActivityIDs}}<input type="hidden" name="act" value="{{.}}">{{end}}
+  {{if .ShowHomeWork}}<input type="hidden" name="hw" value="1">{{end}}
+  {{if .Sort}}<input type="hidden" name="sort" value="{{.Sort}}">{{end}}
+</form>
+{{end}}
+
+{{define "emptystate"}}
+<div class="card">
+  <div class="empty">
+    <div class="big">🗺️</div>
+    <div style="font-size:15px;color:var(--text);margin-bottom:6px">还没有导入任何数据</div>
+    <div>登录后台，上传 rond 导出的 <span class="mono">.rondbackup</span> 备份文件即可生成足迹地图。</div>
+    <div style="margin-top:14px"><a class="btn primary" href="/admin">前往后台导入</a></div>
+  </div>
+</div>
+{{end}}
+
+{{define "pager"}}
+{{if gt .PageCount 1}}
+<div class="pager">
+  {{if gt .PageNo 1}}<a href="{{.Link .FilterBase "page" (printf "%d" (sub .PageNo 1))}}">上一页</a>{{end}}
+  <span class="cur">第 {{.PageNo}} / {{.PageCount}} 页</span>
+  {{if lt .PageNo .PageCount}}<a href="{{.Link .FilterBase "page" (printf "%d" (add .PageNo 1))}}">下一页</a>{{end}}
+</div>
+{{end}}
+{{end}}
+
+{{define "layout"}}<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+{{/* viewport-fit=cover 才会把刘海屏 / 底部 Home 指示条的安全区通过 env() 暴露出来，否则 CSS 里的 safe-area-inset 全是 0 */}}
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>{{.Title}} · {{.Settings.SiteTitle}}</title>
+<script>window.__assetV="{{.AssetV}}"</script>
+<link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
+<link rel="manifest" href="/static/manifest.webmanifest">
+<meta name="theme-color" content="{{.Settings.AccentColor}}">
+<link rel="apple-touch-icon" href="/static/icons/icon-192.png">
+{{if .HasMap}}
+<link rel="stylesheet" href="/static/vendor/leaflet/leaflet.css?v={{.AssetV}}">
+{{if or (eq .Nav "map") (eq .Nav "topics")}}
+<link rel="stylesheet" href="/static/vendor/markercluster/MarkerCluster.css?v={{.AssetV}}">
+<link rel="stylesheet" href="/static/vendor/markercluster/MarkerCluster.Default.css?v={{.AssetV}}">
+{{end}}
+{{end}}
+{{if .Flatpickr}}
+<link rel="stylesheet" href="/static/vendor/flatpickr/flatpickr.min.css?v={{.AssetV}}">
+{{end}}
+<link rel="stylesheet" href="/static/css/app.css?v={{.AssetV}}">
+{{/* accent-base 是站长选的主色原值：暗色模式会用 color-mix 把它提亮，否则深色底上的链接会看不清（原来的深绿在深底上只有 3.3:1）。 */}}
+<style>:root{--accent:{{.Settings.AccentColor}};--accent-soft:{{.Settings.AccentColor}}1a;--accent-base:{{.Settings.AccentColor}}}</style>
+</head>
+<body>
+{{template "nav" .}}
+{{template "content" .}}
+{{if ne .Nav "map"}}
+<footer class="ft">
+  {{.Settings.SiteTitle}}{{if .Settings.SiteSubtitle}} · {{.Settings.SiteSubtitle}}{{end}}
+  {{if .Dataset}} · 数据截至 {{d .Dataset.Last}}{{end}}
+</footer>
+{{end}}
+{{if .HasMap}}
+<script src="/static/vendor/leaflet/leaflet.js?v={{.AssetV}}"></script>
+{{if or (eq .Nav "map") (eq .Nav "topics")}}<script src="/static/vendor/markercluster/leaflet.markercluster.js?v={{.AssetV}}"></script>{{end}}
+<script src="/static/js/rond-map.js?v={{.AssetV}}"></script>
+{{end}}
+{{if .Flatpickr}}
+<script src="/static/vendor/flatpickr/flatpickr.min.js?v={{.AssetV}}"></script>
+<script src="/static/vendor/flatpickr/l10n/zh.js?v={{.AssetV}}"></script>
+{{end}}
+{{/* 第三方统计脚本：只在公开页面挂，后台/登录页不挂（免得把自己的操作也统计进去） */}}
+{{if and .TrackScript (ne .Nav "admin")}}
+{{.TrackScript}}
+{{end}}
+<script>
+// 后台的表单提交 / 翻页 / 搜索都是整页刷新，浏览器会回到顶部，滚动位置就丢了。
+// 这里在离开前把位置记进 sessionStorage，加载完再滚回去。
+// 只在 /admin 下生效：前台页面（主页进详情之类）本来就该从头看。
+(function () {
+  if (location.pathname.indexOf("/admin") !== 0) return;
+  var KEY = "rond:scroll:" + location.pathname;
+  function record() {
+    try {
+      sessionStorage.setItem(KEY, Math.round(window.scrollY || window.pageYOffset || 0) + ":" + Date.now());
+    } catch (e) {}
+  }
+  function restore() {
+    try {
+      var raw = sessionStorage.getItem(KEY);
+      if (!raw) return;
+      sessionStorage.removeItem(KEY);
+      var parts = raw.split(":"), y = parseInt(parts[0], 10), ts = parseInt(parts[1], 10);
+      // 10 秒内才认：确认框被取消时留下的记录不该在下次打开时把视图拽走
+      if (isFinite(y) && y > 0 && Date.now() - ts < 10000) window.scrollTo(0, y);
+    } catch (e) {}
+  }
+  // 等 load：解析阶段就滚的话文档可能还不够高，scrollTo 会被截断到 0
+  if (document.readyState === "complete") restore();
+  else window.addEventListener("load", restore);
+  document.addEventListener("submit", record, true);
+  // 翻页 / 重置这类是同路径的链接跳转，也要记（新开标签、锚点、跨页不记）
+  document.addEventListener("click", function (ev) {
+    var a = ev.target && ev.target.closest ? ev.target.closest("a") : null;
+    if (!a) return;
+    var href = a.getAttribute("href") || "";
+    if (!href || href.charAt(0) === "#" || a.target === "_blank") return;
+    var u;
+    try { u = new URL(a.href, location.href); } catch (e) { return; }
+    if (u.pathname === location.pathname) record();
+  }, true);
+})();
+</script>
+
+{{/* 长列表（地点库 300+ 行、时间线 800+ 条）划到底后能一键回来。
+     地图页整页不滚动，所以这个按钮在那里不会出现。 */}}
+{{/* 顶部细进度条：筛选是整页 GET，慢网下点了没反应会让人以为卡住 */}}
+<div class="load-bar" id="load-bar" hidden></div>
+<button class="to-top" id="to-top" type="button" aria-label="回到顶部" hidden>↑</button>
+<script>
+(function () {
+  /* ---------- 顶部加载进度条 ---------- */
+  var bar = document.getElementById('load-bar'), timer = null, safety = null, w = 0;
+  function start() {
+    bar.hidden = false;
+    w = 8;
+    bar.style.width = w + '%';
+    bar.style.opacity = '1';
+    clearInterval(timer);
+    timer = setInterval(function () {
+      w = Math.min(90, w + Math.max(0.4, (90 - w) / 14));
+      bar.style.width = w + '%';
+    }, 180);
+    // 兜底：万一这次「跳转」被阻止了（比如地图页是 AJAX 换数据），别让进度条一直挂着
+    clearTimeout(safety);
+    safety = setTimeout(finish, 8000);
+  }
+  function finish() {
+    clearInterval(timer);
+    clearTimeout(safety);
+    if (bar.hidden) return;
+    bar.style.width = '100%';
+    setTimeout(function () {
+      bar.style.opacity = '0';
+      setTimeout(function () { bar.hidden = true; bar.style.width = '0'; }, 260);
+    }, 140);
+  }
+  window.rondProgress = { start: start, finish: finish };
+  document.addEventListener('submit', start, true);
+  document.addEventListener('click', function (e) {
+    var a = e.target && e.target.closest ? e.target.closest('a') : null;
+    if (!a || a.target === '_blank' || a.hasAttribute('download')) return;
+    var u;
+    try { u = new URL(a.href, location.href); } catch (err) { return; }
+    // 只对「真的会跳走」的站内链接亮进度条
+    if (u.origin !== location.origin) return;
+    if (u.pathname === location.pathname && u.search === location.search) return;
+    start();
+  }, true);
+  window.addEventListener('pageshow', finish); // 从 bfcache 回来时也要收掉
+
+  /* ---------- 筛选：改动即生效 ---------- */
+  var form = document.getElementById('filters-form');
+  if (form) {
+    // 下拉与日期改了就提交，不用再点「查询」。
+    // 关键词不自动提交（每敲一个字都跳转会很难受）——回车即可。
+    function apply() {
+      // 用 requestSubmit 而不是 form.submit()：前者会**触发 submit 事件**，
+      // 于是地图页自己那个「拦下提交、改走 AJAX」的处理器仍然生效；
+      // 用 submit() 会绕过它，把地图页的筛选变成整页刷新。
+      if (form.requestSubmit) form.requestSubmit();
+      else form.submit();
+    }
+    form.addEventListener('change', function (e) {
+      var el = e.target;
+      if (!el || !el.name) return;
+      if (el.tagName === 'SELECT' || el.type === 'date') apply();
+    });
+  }
+
+  var b = document.getElementById('to-top');
+  function sync() { b.hidden = window.scrollY < 600; }
+  window.addEventListener('scroll', sync, { passive: true });
+  sync();
+  b.addEventListener('click', function () {
+    // 尊重「减少动态效果」偏好：开了就别做平滑滚动
+    var smooth = !window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    window.scrollTo({ top: 0, behavior: smooth ? 'smooth' : 'auto' });
+  });
+})();
+</script>
+</body>
+</html>{{end}}

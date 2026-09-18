@@ -1,0 +1,182 @@
+{{define "content"}}
+{{if not .HasData}}
+<div class="wrap">{{template "emptystate" .}}</div>
+{{else}}
+<div class="wrap">
+
+  <div class="page-head">
+    <div>
+      <h1>{{.Settings.OwnerAvatar}} {{.Settings.OwnerName}}</h1>
+      <div class="sub">{{if .Settings.SiteSubtitle}}{{.Settings.SiteSubtitle}} · {{end}}{{.RangeLabel}}</div>
+    </div>
+    <div class="row">
+      <a class="btn" href="/map">全屏地图</a>
+      <a class="btn" href="/stats">数据统计</a>
+    </div>
+  </div>
+
+  {{if .Settings.Has "overview"}}
+  <div class="kpis" style="margin-bottom:16px">
+    <div class="kpi"><div class="v">{{num .Overview.Places}}<small>个</small></div><div class="k">去过的地点</div></div>
+    <div class="kpi"><div class="v">{{num .Overview.Cities}}<small>座</small></div><div class="k">到过的城市</div></div>
+    <div class="kpi"><div class="v">{{num .Overview.Provinces}}<small>个</small></div><div class="k">覆盖省份</div></div>
+    <div class="kpi"><div class="v">{{num .Overview.Days}}<small>天</small></div><div class="k">有记录的日子</div></div>
+    <div class="kpi"><div class="v">{{num .Overview.Visits}}<small>次</small></div><div class="k">累计到访</div></div>
+    <div class="kpi"><div class="v">{{dur .Overview.DwellMin}}</div><div class="k">累计停留</div></div>
+    <div class="kpi"><div class="v">{{km .Overview.DistanceKm}}<small>km</small></div><div class="k">出行里程</div></div>
+    <div class="kpi"><div class="v">{{if .Overview.FirstAt}}{{since .Overview.FirstAt}}{{else}}—{{end}}</div><div class="k">开始记录于</div></div>
+  </div>
+  {{end}}
+
+  {{if and (.Settings.Has "map") .Points}}
+  <div class="card">
+    <h2>足迹地图</h2>
+    <div class="card-sub">共 {{num (len .Points)}} 个地点{{if .Settings.HideHome}} · 已隐藏「家」{{end}}{{if .Settings.HideWork}} · 已隐藏「工作」{{end}}</div>
+    <div id="home-map" class="map-preview"></div>
+    <div style="margin-top:10px;font-size:12.5px" class="muted">滚轮被禁用，点击地图进入全屏模式查看细节与筛选。</div>
+  </div>
+  {{end}}
+
+  <div class="grid g2">
+    {{if and (.Settings.Has "types") .ActivityStats}}
+    <div class="card">
+      <h2>去过的类型</h2>
+      <div class="card-sub">按到访次数排序</div>
+      <div class="bars">
+        {{range .ActivityStats}}
+        <div class="bar-row">
+          <div class="nm" title="{{.Name}}">{{with icon .Icon}}{{.}} {{end}}{{.Name}}</div>
+          <div class="bar-track"><div class="bar-fill" style="width:{{pct .Count $.MaxActivity}}%;background:{{colorof .Color}}"></div></div>
+          <div class="vv">{{num .Count}} 次</div>
+        </div>
+        {{end}}
+      </div>
+    </div>
+    {{end}}
+
+    {{if and (.Settings.Has "cities") .CityStats}}
+    <div class="card">
+      <h2>城市足迹</h2>
+      <div class="card-sub">按到访次数排序</div>
+      <div class="bars">
+        {{range .CityStats}}
+        <div class="bar-row">
+          <div class="nm"><a href="{{$.CityLink .City}}">{{.City}}</a></div>
+          <div class="bar-track"><div class="bar-fill" style="width:{{pct .Count $.MaxCity}}%"></div></div>
+          <div class="vv">{{num .Count}} 次</div>
+        </div>
+        {{end}}
+      </div>
+      <div style="margin-top:12px" class="muted">共覆盖 {{num .Overview.Cities}} 座城市、{{num .Overview.Provinces}} 个省级行政区。</div>
+    </div>
+    {{end}}
+  </div>
+
+  {{if .Monthly}}
+  <div class="card">
+    <h2>月度活跃度</h2>
+    <div class="card-sub">每月到访次数</div>
+    <div class="cols">
+      {{range .Monthly}}<div class="col" style="height:{{.Pct}}%" title="{{.Key}}：{{.Count}} 次"></div>{{end}}
+    </div>
+    <div class="cols-x">{{range .Monthly}}<span>{{.Label}}</span>{{end}}</div>
+  </div>
+  {{end}}
+
+  {{if and (.Settings.Has "heatmap") .Calendar}}
+  <div class="card">
+    <h2>活跃日历</h2>
+    <div class="card-sub">每一列是一周，颜色越深记录越多</div>
+    <div class="heat">
+      {{range .Calendar}}<div class="wk">{{range .Days}}<div class="d {{if gt .Level 0}}l{{.Level}}{{end}}" title="{{.Title}}"></div>{{end}}</div>{{end}}
+    </div>
+    <div class="heat-legend">少 <span class="d"></span><span class="d l1"></span><span class="d l2"></span><span class="d l3"></span><span class="d l4"></span> 多</div>
+  </div>
+  {{end}}
+
+  <div class="grid g2">
+    {{if and (.Settings.Has "transport") .Transports}}
+    <div class="card">
+      <h2>出行方式</h2>
+      <div class="card-sub">按次数排序，里程为两点间直线距离估算</div>
+      <div class="bars">
+        {{range .Transports}}
+        <div class="bar-row">
+          <div class="nm">{{with icon .Icon}}{{.}} {{end}}{{.Name}}</div>
+          <div class="bar-track"><div class="bar-fill" style="width:{{pct .Count $.MaxTransport}}%;background:{{colorof .Color}}"></div></div>
+          <div class="vv">{{num .Count}} 次</div>
+        </div>
+        {{end}}
+      </div>
+    </div>
+    {{end}}
+
+    {{if and (.Settings.Has "tags") .Tags}}
+    <div class="card">
+      <h2>我的标签</h2>
+      <div class="card-sub">记录时打上的自定义标签</div>
+      <div class="chips">
+        {{range .Tags}}
+        <a class="chip" href="{{$.TagLink .ID}}" title="{{num .Count}} 次">
+          <span class="dot" style="background:{{colorof .Color}}"></span>{{.Name}}
+          <span class="muted">{{num .Count}}</span>
+        </a>
+        {{end}}
+      </div>
+    </div>
+    {{end}}
+  </div>
+
+  {{if and (.Settings.Has "weather") .Weather}}
+  <div class="card">
+    <h2>天气足迹</h2>
+    <div class="card-sub">记录期间经历过的天气</div>
+    <div class="tw">
+      <table class="tb">
+        <thead><tr><th>天气</th><th class="num">记录小时数</th><th class="num">平均气温</th><th class="num">范围</th></tr></thead>
+        <tbody>
+          {{range .Weather}}
+          <tr>
+            <td>{{condition .Condition}}</td>
+            <td class="num">{{num .Count}}</td>
+            <td class="num">{{f1 .AvgTemp}} ℃</td>
+            <td class="num">{{f1 .MinTemp}} ~ {{f1 .MaxTemp}} ℃</td>
+          </tr>
+          {{end}}
+        </tbody>
+      </table>
+    </div>
+  </div>
+  {{end}}
+
+  {{if and (.Settings.Has "timeline") .Recent}}
+  <div class="card">
+    <h2>最近足迹</h2>
+    <div class="card-sub">最新 {{num (len .Recent)}} 条到访记录</div>
+    <div class="list">
+      {{range .Recent}}
+      <div class="item">
+        <div class="ic" style="background:{{colorof .Color}}22">{{iconor .Icon "📍"}}</div>
+        <div>
+          <div class="t">{{if .PlaceID}}<a href="/places/{{.PlaceID}}">{{.PlaceName}}</a>{{else}}未命名地点{{end}}</div>
+          <div class="m">{{day .Arrival}} · {{hm .Arrival}}{{if .City}} · {{.City}}{{end}}{{if .ActivityName}} · {{.ActivityName}}{{end}}{{if .Tags}} · {{range $i, $t := .Tags}}{{if $i}}、{{end}}<span class="tag">{{$t}}</span>{{end}}{{end}}</div>
+        </div>
+        <div class="r">{{dur .DurationMin}}<br><span class="muted">{{since .Arrival}}</span></div>
+      </div>
+      {{end}}
+    </div>
+    <div style="margin-top:12px"><a class="btn sm" href="/timeline">查看完整时间线 →</a></div>
+  </div>
+  {{end}}
+
+</div>
+
+{{if and (.Settings.Has "map") .Points}}
+<script>
+  window.addEventListener('load', function () {
+    window.rondMap.preview({ id: 'home-map', points: {{json .Points}}, clickToFull: true });
+  });
+</script>
+{{end}}
+{{end}}
+{{end}}

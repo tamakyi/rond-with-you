@@ -1,0 +1,173 @@
+{{define "content"}}
+<div class="wrap">
+  <div class="page-head">
+    <div>
+      <h1>迷雾遮罩区</h1>
+      <div class="sub">这些范围内的迷雾<strong>对访客隐藏</strong>，你自己仍然看得到。在地图上点一下就是圆心，半径可调。</div>
+    </div>
+    <div class="row">
+      <a class="btn" href="/admin">← 返回后台</a>
+    </div>
+  </div>
+
+  <div class="card">
+    {{if .Flash}}<div class="alert ok">{{.Flash}}</div>{{end}}
+    {{if .Err}}<div class="alert err">{{.Err}}</div>{{end}}
+
+    <div id="mask-map" style="height:380px;border-radius:10px;background:var(--line-soft)"></div>
+
+    <form method="post" action="/admin/fog/mask/save" id="mask-form" style="margin-top:12px">
+      <input type="hidden" name="id">
+      <input type="hidden" name="lat">
+      <input type="hidden" name="lon">
+      <input type="hidden" name="crs">
+      <div class="row">
+        <label class="f" style="flex:1 1 200px;margin-bottom:0">
+          <span>名称（可选）</span>
+          <input type="text" name="name" maxlength="40" placeholder="例如：家附近、公司周边">
+        </label>
+        <label class="f" style="flex:0 1 150px;margin-bottom:0">
+          <span>半径（米）</span>
+          <input type="number" name="radius_m" min="50" max="50000" step="50" value="500" required>
+        </label>
+        <button class="btn primary" type="submit" id="mask-save">保存</button>
+        <button class="btn" type="button" id="mask-reset">清除选择</button>
+      </div>
+      <div class="muted" id="mask-hint" style="font-size:12.5px;margin-top:6px">在下方地图上点选圆心</div>
+    </form>
+  </div>
+
+  <div class="card">
+    <h2>已有遮罩区（{{len .Masks}}）</h2>
+    {{if .Masks}}
+    <table class="tb">
+      <thead><tr><th>名称</th><th>圆心（纬度, 经度）</th><th>半径</th><th></th></tr></thead>
+      <tbody>
+      {{range .Masks}}
+        <tr>
+          <td>{{if .Name}}{{.Name}}{{else}}<span class="muted">（未命名）</span>{{end}}</td>
+          <td class="mono">{{printf "%.5f" .Lat}}, {{printf "%.5f" .Lon}}</td>
+          <td>{{printf "%.0f" .RadiusM}} 米</td>
+          <td>
+            <button class="btn sm" type="button" data-edit
+                    data-id="{{.ID}}" data-name="{{.Name}}"
+                    data-lat="{{.Lat}}" data-lon="{{.Lon}}" data-radius="{{.RadiusM}}">编辑</button>
+            <form method="post" action="/admin/fog/mask/delete" style="display:inline"
+                  onsubmit="return confirm('删除后这块范围的迷雾会重新对访客显示。确认删除？')">
+              <input type="hidden" name="id" value="{{.ID}}">
+              <button class="btn sm" type="submit">删除</button>
+            </form>
+          </td>
+        </tr>
+      {{end}}
+      </tbody>
+    </table>
+    {{else}}
+      <div class="muted">还没有遮罩区。在地图上点选圆心、设置半径后保存即可。</div>
+    {{end}}
+    <div class="card-sub" style="margin-top:10px">遮罩只影响访客：站长登录状态下看到的始终是完整迷雾。</div>
+  </div>
+</div>
+
+<script>
+(function () {
+  // Leaflet 由 layout 在 content 之后引入，脚本执行时 window.L 还没有，
+  // 必须等 load 事件之后再初始化，否则地图整个不出现（与后台「新增地点」同一条约定）
+  function whenReady(cb) {
+    if (document.readyState === 'complete') { setTimeout(cb, 0); return; }
+    window.addEventListener('load', cb);
+  }
+
+  var el = document.getElementById('mask-map');
+  var form = document.getElementById('mask-form');
+  if (!el || !form) return;
+  var latIn = form.querySelector('[name=lat]'), lonIn = form.querySelector('[name=lon]');
+  var idIn = form.querySelector('[name=id]'), nameIn = form.querySelector('[name=name]');
+  var radiusIn = form.querySelector('[name=radius_m]'), crsIn = form.querySelector('[name=crs]');
+  var hint = document.getElementById('mask-hint');
+  var saveBtn = document.getElementById('mask-save');
+
+  // 底图走站点配置（与后台「新增地点」同一套取法）：带密钥的图层由服务端转发，
+  // 免密钥的是浏览器直连的 {s} 模板，不能硬写 /tiles/ 路由
+  var fallback = {
+    def: { url: 'https://webrd0{s}.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&x={x}&y={y}&z={z}', maxZoom: 18, attr: '© 高德地图', crs: 'gcj02' },
+    subs: ['1', '2', '3', '4']
+  };
+
+  function init(cfg) {
+    var def = cfg.def;
+    var map = L.map(el).setView([34.5, 108.9], 4);
+    L.tileLayer(def.url, { subdomains: cfg.subs, maxZoom: def.maxZoom || 18, minZoom: 3, attribution: def.attr || '' }).addTo(map);
+    crsIn.value = def.crs || 'gcj02';
+
+    // 已有遮罩区画出来（只读），供对照
+    var existing = L.layerGroup().addTo(map);
+    [].forEach.call(document.querySelectorAll('[data-edit]'), function (b) {
+      var lat = parseFloat(b.dataset.lat), lon = parseFloat(b.dataset.lon), r = parseFloat(b.dataset.radius);
+      L.marker([lat, lon], { opacity: 0.65 }).addTo(existing);
+      L.circle([lat, lon], { radius: r, color: '#d9534f', weight: 1.5, fillOpacity: 0.12 }).addTo(existing);
+    });
+
+    var marker = null, circle = null;
+    function place(lat, lon) {
+      if (!marker) {
+        marker = L.marker([lat, lon], { draggable: true }).addTo(map);
+        marker.on('drag', function (e) { circle.setLatLng(e.target.getLatLng()); });
+        marker.on('dragend', function (e) { fillCoord(e.target.getLatLng()); });
+      } else {
+        marker.setLatLng([lat, lon]);
+      }
+      if (!circle) {
+        circle = L.circle([lat, lon], { radius: parseFloat(radiusIn.value) || 500, color: '#d9534f', fillOpacity: 0.18 }).addTo(map);
+      } else {
+        circle.setLatLng([lat, lon]);
+      }
+    }
+    function fillCoord(ll) { latIn.value = ll.lat.toFixed(6); lonIn.value = ll.lng.toFixed(6); }
+
+    radiusIn.addEventListener('input', function () {
+      if (circle) circle.setRadius(Math.max(50, parseFloat(radiusIn.value) || 500));
+    });
+    map.on('click', function (e) { place(e.latlng.lat, e.latlng.lng); fillCoord(e.latlng); });
+    marker = null;
+
+    // 列表里的「编辑」：把该行灌进表单，地图上跟过去
+    [].forEach.call(document.querySelectorAll('[data-edit]'), function (b) {
+      b.addEventListener('click', function () {
+        idIn.value = b.dataset.id;
+        nameIn.value = b.dataset.name || '';
+        radiusIn.value = Math.round(parseFloat(b.dataset.radius) || 500);
+        var lat = parseFloat(b.dataset.lat), lon = parseFloat(b.dataset.lon);
+        place(lat, lon);
+        fillCoord({ lat: lat, lng: lon });
+        map.setView([lat, lon], 13);
+        saveBtn.textContent = '保存修改';
+        hint.textContent = '正在编辑「' + (b.dataset.name || b.dataset.id) + '」，也可以在地图上点选新圆心';
+        el.scrollIntoView({ block: 'center', behavior: 'smooth' });
+      });
+    });
+
+    document.getElementById('mask-reset').addEventListener('click', function () {
+      form.reset();
+      idIn.value = '';
+      radiusIn.value = 500;
+      if (marker) { map.removeLayer(marker); marker = null; }
+      if (circle) { map.removeLayer(circle); circle = null; }
+      saveBtn.textContent = '保存';
+      hint.textContent = '在下方地图上点选圆心';
+    });
+  }
+
+  whenReady(function () {
+    if (!window.L) return;
+    fetch('/api/map-config', { headers: { 'Accept': 'application/json' } })
+      .then(function (r) { return r.json(); })
+      .then(function (c) {
+        var def = (c && c.base && c.base.length) ? c.base[0] : fallback.def;
+        init({ def: def, subs: (c && c.subs && c.subs.length) ? c.subs : fallback.subs });
+      })
+      .catch(function () { init(fallback); });
+  });
+})();
+</script>
+{{end}}

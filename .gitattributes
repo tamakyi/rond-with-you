@@ -1,0 +1,23 @@
+# 统一按 LF 存放与检出。
+#
+# 仓库里的文本一直是 LF，但 Windows 默认的 core.autocrlf=true 会把**工作区**换成 CRLF，
+# 于是 `gofmt -l` 会把「行尾是 CRLF」误报成「格式不对」——18 个文件里只有 12 个是真问题，
+# 真实的格式问题就淹没在噪声里。这条属性让工作区也保持 LF，检查才有意义。
+* text=auto eol=lf
+
+# 二进制：别让 git 去做行尾转换或内容探测
+*.png    binary
+*.jpg    binary
+*.jpeg   binary
+*.gif    binary
+*.webp   binary
+*.ico    binary
+*.woff   binary
+*.woff2  binary
+*.ttf    binary
+*.otf    binary
+*.zip    binary
+*.gz     binary
+*.pdf    binary
+*.sqlite binary
+*.rondbackup binary

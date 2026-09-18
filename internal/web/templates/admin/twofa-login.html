@@ -1,0 +1,39 @@
+{{define "login2"}}<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+{{/* viewport-fit=cover 才会把刘海屏 / 底部 Home 指示条的安全区通过 env() 暴露出来，否则 CSS 里的 safe-area-inset 全是 0 */}}
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>两步验证 · {{.Settings.SiteTitle}}</title>
+<link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
+<link rel="stylesheet" href="/static/css/app.css">
+<style>:root{--accent:{{.Settings.AccentColor}};--accent-soft:{{.Settings.AccentColor}}1a}</style>
+</head>
+<body>
+<div style="min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px">
+  <div style="width:100%;max-width:368px">
+    <div style="text-align:center;margin-bottom:22px">
+      <div style="font-size:30px">🔐</div>
+      <h1 style="font-size:19px;margin-top:6px">两步验证</h1>
+      <div class="muted" style="font-size:13px">输入验证器 App 中的 6 位验证码</div>
+    </div>
+
+    <div class="card" style="margin:0">
+      {{if .Err}}<div class="alert err">{{.Err}}</div>{{end}}
+      <form method="post" action="/admin/login/twofa">
+        <input type="hidden" name="pending" value="{{.Pending}}">
+        <input type="hidden" name="next" value="{{.Next}}">
+        <label class="f"><span>验证码</span>
+          <input type="text" name="code" inputmode="numeric" pattern="[0-9]*" maxlength="6"
+                 autocomplete="one-time-code" autofocus required
+                 style="text-align:center;font-size:20px;letter-spacing:8px">
+        </label>
+        <button class="btn primary" type="submit" style="width:100%;justify-content:center">验证并登录</button>
+      </form>
+    </div>
+
+    <div style="text-align:center;margin-top:16px"><a class="muted" href="/admin/login" style="font-size:13px">← 重新登录</a></div>
+  </div>
+</div>
+</body>
+</html>{{end}}

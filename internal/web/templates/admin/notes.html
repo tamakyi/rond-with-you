@@ -1,0 +1,189 @@
+{{define "content"}}
+<div class="wrap">
+  <div class="page-head">
+    <div>
+      <h1>地点备注</h1>
+      <div class="sub">列出当前数据集的全部地点，可给任意地点起别名、写备注、标「推荐 / 踩雷」；别名会替代原名显示</div>
+    </div>
+    <div class="row">
+      <a class="btn" href="/admin/settings">可见性设置</a>
+      <a class="btn" href="/admin">← 返回后台</a>
+    </div>
+  </div>
+
+  {{if .Flash}}<div class="alert ok">{{.Flash}}</div>{{end}}
+  {{if .Err}}<div class="alert err">{{.Err}}</div>{{end}}
+
+  <div class="card">
+    <div class="card-sub" style="margin:0 0 10px;display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+      <span>
+        备注对外{{if .NotesPublic}}<b>公开</b>（访客也能看到）{{else}}<b>不公开</b>（只有你能看到）{{end}}
+        · 共 {{num .Total}} 个地点
+      </span>
+      <form method="post" action="/admin/notes/rond" style="margin:0">
+        <button class="btn sm" type="submit"
+                title="把 rond 备份里按次到访写的备注汇总成地点备注；只重写「来自 rond」那一块，你手写的内容不动">
+          从 rond 备份回填备注
+        </button>
+      </form>
+    </div>
+    <form method="get" action="/admin/notes" class="row" style="gap:8px;flex-wrap:wrap;align-items:flex-end;margin:0">
+      <label class="f" style="margin:0;flex:1 1 200px"><span>关键词</span>
+        <input type="text" name="q" value="{{.Query}}" placeholder="地点名 / 别名 / 备注 / 城市">
+      </label>
+      <label class="f" style="margin:0;flex:0 0 145px"><span>状态</span>
+        <select name="status">
+          <option value="all" {{if eq .Status "all"}}selected{{end}}>全部地点</option>
+          <option value="has" {{if eq .Status "has"}}selected{{end}}>仅有备注</option>
+          <option value="none" {{if eq .Status "none"}}selected{{end}}>仅无备注</option>
+        </select>
+      </label>
+      <label class="f" style="margin:0;flex:0 0 150px"><span>城市</span>
+        <select name="city">
+          <option value="">全部城市</option>
+          {{range .CityOptions}}<option value="{{.}}" {{if eq . $.City}}selected{{end}}>{{.}}</option>{{end}}
+        </select>
+      </label>
+      <label class="f" style="margin:0;flex:0 0 140px"><span>排序</span>
+        <select name="sort">
+          <option value="visit" {{if eq .Sort "visit"}}selected{{end}}>到访次数</option>
+          <option value="note" {{if eq .Sort "note"}}selected{{end}}>最近编辑</option>
+          <option value="talk" {{if eq .Sort "talk"}}selected{{end}}>票数</option>
+          <option value="name" {{if eq .Sort "name"}}selected{{end}}>名称</option>
+        </select>
+      </label>
+      <button class="btn primary" type="submit">筛选</button>
+      <a class="btn" href="/admin/notes">重置</a>
+    </form>
+  </div>
+
+  {{if .Rows}}
+  <form id="bulk-form" method="post" action="/admin/notes/bulk"></form>
+  <div class="card" style="position:sticky;top:8px;z-index:3;display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+    <label class="check" style="margin:0"><input type="checkbox" id="chk-all"> 全选本页</label>
+    <span class="muted" style="font-size:12.5px">批量：</span>
+    <select name="verdict" form="bulk-form" style="padding:5px 8px;border:1px solid var(--line);border-radius:8px">
+      <option value="1">👍 推荐</option>
+      <option value="-1">👎 踩雷</option>
+      <option value="0">取消结论</option>
+    </select>
+    <button class="btn sm" type="submit" form="bulk-form" name="action" value="verdict">设为该结论</button>
+    <button class="btn sm" type="submit" form="bulk-form" name="action" value="clear"
+            onclick="return confirm('清空所选地点的手写备注？（别名与「来自 rond」的备注都会保留）')">清空备注</button>
+    <button class="btn sm danger" type="submit" form="bulk-form" name="action" value="delete"
+            onclick="return confirm('删除所选地点的手写备注与别名？（rond 备份里的备注下次回填还会再出现）')">删除备注</button>
+  </div>
+
+  <div class="card" style="padding:0">
+    <div class="list">
+      {{range .Rows}}
+      <div class="item" style="grid-template-columns:28px 1fr;gap:10px;align-items:stretch">
+        <div style="display:flex;align-items:flex-start;padding-top:10px">
+          <input type="checkbox" name="src_pk" value="{{.SrcPK}}" form="bulk-form" class="row-chk">
+        </div>
+        <div>
+          <form method="post" action="/admin/place/note" style="display:grid;grid-template-columns:1fr 1.4fr auto;gap:10px;align-items:end">
+            <input type="hidden" name="src_pk" value="{{.SrcPK}}">
+            <input type="hidden" name="next" value="{{$.BackURL}}">
+            <label class="f" style="margin:0">
+              <span>别名{{if .PlaceName}}（原名：{{.PlaceName}}{{if .PlaceCity}} · {{.PlaceCity}}{{end}}）{{end}}</span>
+              <input type="text" name="alias" value="{{.Alias}}" maxlength="60" placeholder="{{.PlaceName}}">
+            </label>
+            <label class="f" style="margin:0">
+              <span>备注{{if .PlaceID}} <a href="/places/{{.PlaceID}}" target="_blank">查看 ↗</a>{{end}}</span>
+              <input type="text" name="note" value="{{.Content}}" maxlength="2000">
+            </label>            <div class="row" style="gap:6px;flex-wrap:nowrap">
+              <button class="btn primary" type="submit">保存</button>
+              <button class="vote-btn up {{if eq .Verdict 1}}on{{end}}" type="button"
+                      data-verdict-btn data-src="{{.SrcPK}}" data-v="1" title="标为推荐">👍</button>
+              <button class="vote-btn down {{if eq .Verdict -1}}on{{end}}" type="button"
+                      data-verdict-btn data-src="{{.SrcPK}}" data-v="-1" title="标为踩雷">👎</button>
+            </div>
+          </form>
+          <div class="muted" style="font-size:12px;margin-top:4px">
+            地点 ID {{.SrcPK}}{{if .VisitCount}} · 到访 {{num .VisitCount}} 次{{end}}
+            <span class="vote-tip" data-verdict-status="{{.SrcPK}}">{{if eq .Verdict 1}} · 已标推荐{{else if eq .Verdict -1}} · 已标踩雷{{end}}</span>
+            {{if or .Up .Down}} · 访客 👍{{.Up}} 👎{{.Down}}{{end}}
+            {{if .Content}} · 更新于 {{dt .UpdatedAt}}{{end}}
+          </div>
+          {{if .RondNote}}<div class="note-block">来自 rond：{{.RondNote}}</div>{{end}}
+        </div>
+      </div>
+      {{end}}
+    </div>
+  </div>
+
+  {{if gt .PageCount 1}}
+  <div class="pager">
+    {{if gt .PageNo 1}}<a href="{{.PageLink (sub .PageNo 1)}}">上一页</a>{{end}}
+    <span class="cur">第 {{.PageNo}} / {{.PageCount}} 页</span>
+    {{if lt .PageNo .PageCount}}<a href="{{.PageLink (add .PageNo 1)}}">下一页</a>{{end}}
+  </div>
+  {{end}}
+
+  <script>
+  (function () {
+    var all = document.getElementById('chk-all');
+    var boxes = document.querySelectorAll('.row-chk');
+    if (all) {
+      all.addEventListener('change', function () {
+        boxes.forEach(function (b) { b.checked = all.checked; });
+      });
+    }
+
+    // 行内 👍/👎 用 AJAX（原来是 formaction 提交 → 整页刷新，会把同一行没保存的备注编辑一起丢掉）
+    document.querySelectorAll('.vote-btn[data-verdict-btn]').forEach(function (b) {
+      b.addEventListener('click', function () {
+        var src = b.getAttribute('data-src');
+        var v = Number(b.getAttribute('data-v'));
+        fetch('/api/verdict', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          credentials: 'same-origin',
+          body: 'src_pk=' + src + '&verdict=' + (b.classList.contains('on') ? 0 : v)
+        }).then(function (r) { return r.json(); }).then(function (d) {
+          if (d.error) { alert(d.error); return; }
+          var cur = Number(d.verdict) || 0;
+          b.parentElement.querySelectorAll('.vote-btn').forEach(function (x) {
+            x.classList.toggle('on', Number(x.getAttribute('data-v')) === cur);
+          });
+          var st = document.querySelector('[data-verdict-status="' + src + '"]');
+          if (st) {
+            st.className = 'vote-tip' + (cur === 1 ? ' up' : cur === -1 ? ' down' : '');
+            st.textContent = cur === 1 ? ' · 已标推荐' : cur === -1 ? ' · 已标踩雷' : '';
+          }
+        }).catch(function () {});
+      });
+    });
+  })();
+  </script>
+  {{else}}
+  <div class="empty"><div class="big">📝</div>{{if .Query}}没有匹配的地点{{else}}当前数据集里还没有地点{{end}}</div>
+  {{end}}
+
+  {{if .Orphans}}
+  <div class="card" style="padding:0;margin-top:16px">
+    <div style="padding:12px 14px 4px"><h2 style="margin:0">已不在当前数据集的备注</h2>
+      <div class="card-sub">这些备注挂在当前备份里已不存在的地点上（换了快照的旧地点），可逐条清理。</div>
+    </div>
+    <div class="list">
+      {{range .Orphans}}
+      <div class="item" style="grid-template-columns:1fr auto;gap:10px;align-items:center">
+        <div>
+          <div>{{if .Alias}}{{.Alias}}{{else}}<span class="muted">（无别名）</span>{{end}}{{if .Content}} · <span class="muted">{{.Content}}</span>{{end}}{{if .RondNote}} · <span class="muted">来自 rond：{{.RondNote}}</span>{{end}}</div>
+          <div class="muted" style="font-size:12px">地点 ID {{.SrcPK}} · 更新于 {{dt .UpdatedAt}}</div>
+        </div>
+        <form method="post" action="/admin/place/note">
+          <input type="hidden" name="src_pk" value="{{.SrcPK}}">
+          <input type="hidden" name="alias" value="">
+          <input type="hidden" name="note" value="">
+          <input type="hidden" name="next" value="{{$.BackURL}}">
+          <button class="btn danger" type="submit" onclick="return confirm('删除这条备注？')">删除</button>
+        </form>
+      </div>
+      {{end}}
+    </div>
+  </div>
+  {{end}}
+</div>
+{{end}}

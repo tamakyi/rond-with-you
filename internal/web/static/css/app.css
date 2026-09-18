@@ -1,0 +1,900 @@
+:root {
+  --accent: #2f7d6e;
+  --accent-soft: #e8f3f0;
+  --bg: #f6f7f8;
+  --panel: #ffffff;
+  --line: #e5e7ea;
+  --line-soft: #f0f1f3;
+  --text: #1f2328;
+  --text-2: #5b6169;
+  /* 次要文字。原来是 #8b9199，对白底只有 3.18:1、对浅灰底 2.81:1，
+     低于 WCAG AA 的 4.5:1（页面副标题、KPI 标签、筛选计数全用这个色阶）。
+     改成 #666d75 之后：白底 5.24 / 浅灰底 4.63 / 绿浅底 4.62，
+     既达标又仍比 --text-2（5.53）浅，层次没丢。 */
+  --text-3: #666d75;
+  /* 会随明暗切换的「面」色，抽出来暗色只需换这一组 */
+  --surface: #ffffff;                       /* 输入框 / 按钮 / 浮层的底 */
+  --glass: rgba(255, 255, 255, .92);        /* 顶栏毛玻璃 */
+  --glass-strong: rgba(255, 255, 255, .97); /* 地图面板 / 图例 */
+  --row-hover: #fbfcfc;
+  --bg-2: #fafbfb;                          /* 比卡片略深一层的面（行内编辑表单、空态框） */
+  --on-accent: #ffffff;                     /* 主色底上的文字 */
+  --ok-bg: #eef8f5;  --ok-fg: #17604f;  --ok-line: #cfe6e0;
+  --err-bg: #fdf3f2; --err-fg: #b42318; --err-line: #f3dcda;
+  --info-bg: #f2f6fd; --info-fg: #2c5282; --info-line: #dbe5f5;
+  --radius: 10px;
+  --shadow: 0 1px 2px rgba(16, 24, 40, .04), 0 1px 3px rgba(16, 24, 40, .06);
+  --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+  /* 顶栏高度：窄屏更矮。地图页的定位跟它对齐，避免出现几像素的缝。 */
+  --nav-h: 54px;
+  /* 刘海屏 / 底部 Home 指示条的安全区。不支持 env() 的浏览器回落到 0。 */
+  --safe-t: env(safe-area-inset-top, 0px);
+  --safe-r: env(safe-area-inset-right, 0px);
+  --safe-b: env(safe-area-inset-bottom, 0px);
+  --safe-l: env(safe-area-inset-left, 0px);
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  padding: 0;
+  background: var(--bg);
+  color: var(--text);
+  font: 14px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans SC", sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+a { color: var(--accent); text-decoration: none; }
+a:hover { text-decoration: underline; }
+h1, h2, h3, h4 { margin: 0; font-weight: 600; letter-spacing: -.01em; }
+
+/* ---------- 顶栏 ---------- */
+.nav {
+  position: sticky; top: 0; z-index: 500;
+  background: var(--glass);
+  backdrop-filter: saturate(1.6) blur(10px);
+  border-bottom: 1px solid var(--line);
+  /* 横屏时刘海在左右，竖屏时状态栏在顶部 */
+  padding: var(--safe-t) var(--safe-r) 0 var(--safe-l);
+}
+.nav-inner {
+  max-width: 1120px; margin: 0 auto; padding: 0 20px;
+  height: var(--nav-h); display: flex; align-items: center; gap: 22px;
+}
+.brand { display: flex; align-items: center; gap: 8px; font-weight: 600; color: var(--text); font-size: 15px; }
+.brand:hover { text-decoration: none; }
+.brand .avatar { font-size: 18px; }
+.nav-links { display: flex; gap: 4px; flex: 1; }
+.nav-links a {
+  padding: 5px 11px; border-radius: 7px; color: var(--text-2); font-size: 13.5px; white-space: nowrap;
+}
+.nav-links a:hover { background: var(--line-soft); color: var(--text); text-decoration: none; }
+.nav-links a.on { background: var(--accent-soft); color: var(--accent); font-weight: 500; }
+.nav-right { display: flex; align-items: center; gap: 10px; font-size: 13px; color: var(--text-3); }
+
+/* ---------- 布局 ---------- */
+.wrap { max-width: 1120px; margin: 0 auto;
+  padding: 22px calc(20px + var(--safe-r)) calc(60px + var(--safe-b)) calc(20px + var(--safe-l)); }
+.wrap-wide { max-width: 100%; padding: 0; }
+.page-head { margin-bottom: 18px; display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+.page-head h1 { font-size: 21px; }
+.page-head .sub { color: var(--text-3); font-size: 13px; margin-top: 3px; }
+
+.card {
+  background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius);
+  box-shadow: var(--shadow); padding: 18px; margin-bottom: 16px;
+}
+.card > h2 { font-size: 15px; margin-bottom: 2px; display: flex; align-items: center; gap: 8px; }
+/* .card-body 是数据编辑页折叠用的容器，卡片内容被它包住后不再是 .card 的直接子元素，
+   所以下面两条用「后代」而不是「子」选择器——否则折叠脚本一加上，间距就全没了。 */
+.card .card-sub { color: var(--text-3); font-size: 12.5px; margin-bottom: 14px; }
+.card.collapsed .card-body { display: none; }
+/* 只有带 data-card 的卡片（数据编辑页）能折叠：标题整行可点，右侧一个箭头 */
+.card[data-card] > h2 { cursor: pointer; }
+.card[data-card] > h2 .card-toggle {
+  margin-left: auto; flex: 0 0 auto; cursor: pointer;
+  background: none; border: 0; padding: 0 2px; color: var(--text-3);
+  font: inherit; font-size: 12px; line-height: 1;
+}
+.card[data-card] > h2 .card-toggle:hover { color: var(--text); }
+.grid { display: grid; gap: 16px; }
+/* grid 子项默认 min-width:auto（= 不小于自身 min-content），而卡片里常常放着
+   带 min-width 的表格——不加这条，卡片会拒绝收缩、把**整页**顶宽，出现横向滚动条
+   （/stats、/report 在手机上整页 692px 就是这么来的）。压到 0 之后由卡片内部的
+   .tw 自己横向滚动。 */
+.grid > * { min-width: 0; }
+.g2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.g3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.g4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+@media (max-width: 900px) { .g3, .g4 { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 620px) {
+  :root { --nav-h: 50px; }
+  .g2, .g3, .g4 { grid-template-columns: 1fr; }
+  .wrap { padding: 16px calc(14px + var(--safe-r)) calc(48px + var(--safe-b)) calc(14px + var(--safe-l)); }
+  .nav-inner { padding: 0 10px; gap: 6px; }
+  /* 窄屏只留头像，导航可横向滚动，避免换行把布局撑坏 */
+  .brand .t { display: none; }
+  .nav-links { overflow-x: auto; scrollbar-width: none; gap: 0; }
+  .nav-links::-webkit-scrollbar { display: none; }
+  .nav-links a { padding: 5px 7px; font-size: 13px; }
+  .nav-right .who { display: none; }
+  .nav-right .btn.sm { padding: 4px 9px; font-size: 12.5px; }
+}
+
+/* ---------- 窄屏触控与表单（移动端适配） ---------- */
+/* 手指的落点比鼠标粗得多：导航链接原本只有 40×31、筛选标签 59×28、小按钮 45×30，
+   都低于 44×44 的通行下限，最容易点的就是它们。这里只放宽尺寸与内边距，不动结构。 */
+@media (max-width: 620px) {
+  .nav-links a, .btn, .btn.sm, .chip { min-height: 44px; }
+  .nav-links a { display: inline-flex; align-items: center; padding: 8px 9px; }
+  .chip { padding: 9px 12px; }
+  .btn, .btn.sm { padding: 10px 14px; }
+  .check input { width: 20px; height: 20px; }
+  /* iOS 聚焦字号小于 16px 的控件时会自动放大整页——用户点完输入框页面突然变大，
+     还要手动缩回去。窄屏统一提到 16px 规避（桌面端不受影响，保持紧凑）。 */
+  :root { --field-fs: 16px; }
+  /* 表格里的控件仍然紧凑：后台那张表列很多，16px 会把列撑得很难用。
+     表格里横向可滚，iOS 缩放的影响也小。 */
+  .photo-table, table.tb { --field-fs: 14px; }
+}
+
+.only-sm { display: none; }
+@media (max-width: 620px) {
+  .hide-sm { display: none; }
+  .only-sm { display: inline; }
+  /* 窄屏用地势与手势缩放，把控件让给底部 */
+  .map-panel { top: 8px; }
+}
+
+/* ---------- 统计数字 ---------- */
+/* grid-auto-rows: 1fr 让所有格子等高：否则某一格的值换行时，那一整行都比别行高 */
+/* 用 flex + grow 而不是固定列数的网格：KPI 个数常常是 6、7 这种除不尽列数的，
+   网格会在最后一行留下空格子——而间隙是用底色画的，空格子就露成灰块，很难看。
+   flex 会让最后一行自己撑满，任何个数都不会有空格。 */
+.kpis { display: flex; flex-wrap: wrap; gap: 1px; background: var(--line); border-radius: var(--radius); overflow: hidden; border: 1px solid var(--line); }
+@media (max-width: 900px) { .kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.kpi { flex: 1 1 158px; min-width: 0; background: var(--panel); padding: 15px 16px; }
+/* 字号跟着视口收：窄屏上「112天19小时」这种值放不下就会折成两行，把整行撑高 */
+.kpi .v { font-size: clamp(17px, 5.6vw, 23px); font-weight: 650; letter-spacing: -.02em; font-variant-numeric: tabular-nums; }
+.kpi .v small { font-size: 13px; font-weight: 500; color: var(--text-3); margin-left: 3px; }
+.kpi .k { color: var(--text-3); font-size: 12.5px; margin-top: 1px; }
+
+/* ---------- 图表（纯 CSS/SVG） ---------- */
+.bars { display: flex; flex-direction: column; gap: 9px; }
+.bar-row { display: grid; grid-template-columns: 128px 1fr 104px; align-items: center; gap: 10px; font-size: 13px; }
+/* 整行可点（下钻为筛选）：给一点悬停反馈，并让点击区域覆盖整行；
+   柱条本身只有 9px 高，靠「行」来接收点击才够手指点 */
+a.bar-row { margin: 0 -6px; padding: 4px 6px; border-radius: 6px; color: inherit; text-decoration: none; }
+a.bar-row:hover { background: var(--line-soft); text-decoration: none; }
+a.col { display: block; text-decoration: none; }
+a.col:hover { opacity: 1; filter: brightness(1.12); }
+.bar-row .nm { color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.bar-track { background: var(--line-soft); border-radius: 5px; height: 9px; overflow: hidden; }
+.bar-fill { height: 100%; border-radius: 5px; background: var(--accent); min-width: 2px; }
+.bar-row .vv { text-align: right; color: var(--text-2); font-variant-numeric: tabular-nums; font-size: 12.5px; white-space: nowrap; }
+@media (max-width: 620px) {
+  .bar-row { grid-template-columns: 84px 1fr 92px; }
+  /* 图表行在手机上要能点中：整行 ~37px。再往上加（44px）会把「类型分布」这种
+     60 多行的图撑到两倍高，翻起来更难受，这里取个折中。 */
+  a.bar-row { padding: 8px 6px; }
+}
+
+.cols { display: flex; align-items: flex-end; gap: 3px; height: 120px; }
+.cols .col { flex: 1; background: var(--accent); border-radius: 3px 3px 0 0; min-height: 2px; opacity: .85; }
+.cols .col:hover { opacity: 1; }
+.cols-x { display: flex; gap: 3px; font-size: 10px; color: var(--text-3); margin-top: 5px; }
+.cols-x span { flex: 1; text-align: center; overflow: hidden; white-space: nowrap; }
+
+/* ---------- 逐月气温 ---------- */
+.temp-chart { margin-top: 16px; }
+.temp-head { font-size: 12.5px; color: var(--text-3); margin-bottom: 8px; }
+/* 横向可滚动：柱子固定宽，十几二十个月挤在窄屏上也不会把标签压成一团 */
+.temp-strip { display: flex; gap: 4px; overflow-x: auto; padding-bottom: 4px; }
+.temp-col { flex: 0 0 36px; display: flex; flex-direction: column; align-items: center; gap: 3px; cursor: default; }
+.temp-col .tc-v { font-size: 10.5px; color: var(--text-2); font-variant-numeric: tabular-nums; }
+.temp-col .tc-track { width: 100%; height: 84px; display: flex; align-items: flex-end; }
+.temp-col .tc-bar { width: 100%; border-radius: 4px 4px 0 0; min-height: 3px; }
+.temp-col .tc-m { font-size: 10.5px; color: var(--text-3); white-space: nowrap; }
+.temp-col:hover .tc-bar { filter: brightness(1.08); }
+.temp-col:hover .tc-v { color: var(--text); }
+
+/* ---------- 日历热力 ---------- */
+.heat { display: flex; gap: 3px; overflow-x: auto; padding-bottom: 4px; }
+.heat .wk { display: flex; flex-direction: column; gap: 3px; }
+.heat .d { width: 11px; height: 11px; border-radius: 2.5px; background: var(--line-soft); }
+.heat .d.l1 { background: #cfe6e0; }
+.heat .d.l2 { background: #9dcfc3; }
+.heat .d.l3 { background: #5fae9c; }
+.heat .d.l4 { background: var(--accent); }
+.heat-legend { display: flex; align-items: center; gap: 5px; font-size: 11.5px; color: var(--text-3); margin-top: 8px; }
+.heat-legend .d { width: 11px; height: 11px; border-radius: 2.5px; }
+
+/* ---------- 列表 ---------- */
+.list { display: flex; flex-direction: column; }
+.item {
+  display: grid; grid-template-columns: 40px 1fr auto; gap: 12px; align-items: center;
+  padding: 11px 2px; border-bottom: 1px solid var(--line-soft);
+}
+.item:last-child { border-bottom: 0; }
+.item .ic {
+  width: 34px; height: 34px; border-radius: 9px; display: flex; align-items: center; justify-content: center;
+  background: var(--line-soft); font-size: 17px;
+}
+.item .t { font-weight: 500; }
+.item .t a { color: var(--text); }
+.item .m { color: var(--text-3); font-size: 12.5px; margin-top: 1px; }
+.item .r { text-align: right; color: var(--text-2); font-size: 12.5px; white-space: nowrap; }
+
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip {
+  display: inline-flex; align-items: center; gap: 5px; padding: 3px 9px; border-radius: 20px;
+  background: var(--line-soft); color: var(--text-2); font-size: 12.5px; border: 1px solid transparent;
+}
+.chip.on { background: var(--accent-soft); color: var(--accent); border-color: #cfe6e0; font-weight: 500; }
+.chip .dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+.tag { display: inline-block; padding: 1px 7px; border-radius: 5px; background: var(--accent-soft); color: var(--accent); font-size: 11.5px; }
+
+/* ---------- 表单 ---------- */
+label.f { display: block; margin-bottom: 13px; }
+label.f > span { display: block; font-size: 12.5px; color: var(--text-2); margin-bottom: 5px; }
+/* 必填标记：字段名后的红色星号，以及表单顶部的统一说明 */
+.req { color: #b42318; font-weight: 700; margin-left: 2px; }
+.req-tip { font-size: 12.5px; color: var(--text-2); margin: 0 0 10px; }
+.req-tip .req { margin-right: 3px; }
+
+/* flatpickr 日期时间选择器：贴合站点风格 */
+.flatpickr-calendar { border-radius: 10px; box-shadow: 0 8px 30px rgba(0,0,0,.14); font-family: inherit; }
+.flatpickr-day.selected, .flatpickr-day.selected:hover { background: var(--accent); border-color: var(--accent); }
+.flatpickr-day.today { border-color: var(--accent); }
+.flatpickr-day.today:hover { background: var(--accent-soft); color: var(--text); }
+.flatpickr-day:hover { background: var(--accent-soft); }
+/* 控件字号走变量：窄屏要整体提到 16px（iOS 聚焦小于 16px 会自动放大整页），
+   而基础选择器 input[type=…], select, textarea 的特异性高于媒体查询里的单选择器，
+   直接在里面写 font-size 是压不过的——用可继承的自定义属性就没有这个问题。 */
+/* 按「排除掉不该套文本框样式的类型」来写，而不是逐个枚举 text/number/date——
+   枚举漏了 datetime-local（后台编辑页有 160 多个），那些框就一直是浏览器默认外观：
+   没有圆角、没有内边距、13.33px 的字，跟旁边的输入框明显不是一套。 */
+input:not([type=checkbox]):not([type=radio]):not([type=color]):not([type=range]):not([type=file]):not([type=submit]):not([type=button]):not([type=reset]):not([type=image]):not([type=hidden]),
+select, textarea {
+  width: 100%; padding: 7px 10px; border: 1px solid var(--line); border-radius: 7px; font: inherit;
+  font-size: var(--field-fs, inherit);
+  background: var(--surface); color: var(--text); outline: none;
+}
+input:focus, select:focus, textarea:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+.check { display: flex; align-items: center; gap: 7px; font-size: 13px; color: var(--text-2); margin-bottom: 8px; word-break: keep-all; overflow-wrap: break-word; }
+.check input { width: 15px; height: 15px; accent-color: var(--accent); }
+.nobr { white-space: nowrap; }
+.btn {
+  display: inline-flex; align-items: center; gap: 6px; padding: 7px 14px; border-radius: 7px;
+  border: 1px solid var(--line); background: var(--surface); color: var(--text); font: inherit; font-size: 13.5px; cursor: pointer;
+}
+.btn:hover { background: var(--line-soft); text-decoration: none; }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+.btn.primary:hover { filter: brightness(1.06); }
+.btn.sm { padding: 4px 10px; font-size: 12.5px; }
+.btn.danger { color: #b42318; border-color: #f0cecb; }
+.btn.danger:hover { background: var(--err-bg); }
+.row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.spacer { flex: 1; }
+
+/* ---------- 表格 ---------- */
+table.tb { width: 100%; border-collapse: collapse; font-size: 13px; }
+table.tb th {
+  text-align: left; font-weight: 500; color: var(--text-3); font-size: 12px;
+  padding: 7px 10px; border-bottom: 1px solid var(--line); white-space: nowrap;
+}
+table.tb td { padding: 9px 10px; border-bottom: 1px solid var(--line-soft); }
+table.tb tr:hover td { background: var(--row-hover); }
+table.tb td.num, table.tb th.num { text-align: right; font-variant-numeric: tabular-nums; }
+.tw { overflow-x: auto; }
+/* 表格要给个内容下限：table 是 width:100%，而 CJK 允许逐字断行，没有下限时窄屏会把
+   每列压到一两个字宽（「一般公共场所」会排成 6 行、一行一个字）。有了下限，放不下就
+   交给上面的 .tw 横向滚动，列宽不再被榨干。 */
+.tw > table.tb { min-width: 640px; }
+/* 从地点详情页跳进来定位到的那一行（?open=）：淡色底，长列表里一眼能认出目标。
+   用底色而不是动画——动画会被 prefers-reduced-motion 跳过，那时就完全看不出来了。 */
+table.tb tr.located td, table.tb tr.located:hover td { background: var(--accent-soft); }
+
+/* ---------- 地图 ---------- */
+#map { height: 100%; width: 100%; background: #eef1f2; }
+.map-page {
+  position: fixed;
+  inset: calc(var(--nav-h) + var(--safe-t)) var(--safe-r) var(--safe-b) var(--safe-l);
+}
+.map-panel {
+  position: absolute; top: 12px; left: 12px; z-index: 400; width: 286px; max-height: calc(100% - 24px);
+  overflow-y: auto; background: var(--glass-strong); backdrop-filter: blur(8px);
+  border: 1px solid var(--line); border-radius: var(--radius); padding: 13px; box-shadow: var(--shadow);
+}
+.map-panel h3 { font-size: 13px; margin-bottom: 9px; color: var(--text-2); }
+.map-legend {
+  /* bottom 让开右下角那行底图版权（约 15px 高），否则两者会叠在一起 */
+  position: absolute; bottom: 26px; right: 12px; z-index: 400; background: var(--glass-strong);
+  border: 1px solid var(--line); border-radius: 8px; padding: 8px 11px; font-size: 12px; 
+  max-height: 40%; overflow-y: auto; box-shadow: var(--shadow);
+}
+.map-legend .lg { display: flex; align-items: center; gap: 6px; margin-top: 4px; color: var(--text-2); }
+.map-legend .lg i { width: 9px; height: 9px; border-radius: 50%; }
+.maplink { display: block; padding: 8px 0; border-bottom: 1px solid var(--line-soft); }
+.maplink b { font-weight: 500; }
+.maplink span { color: var(--text-3); font-size: 12px; display: block; }
+.dot-marker { border-radius: 50%; border: 1.5px solid #fff; box-shadow: 0 0 0 1px rgba(0,0,0,.16); }
+/* 迷雾浓度的样式从内联挪出来：窄屏要把它收成一个可展开的小标签——
+   不然「图层 / 迷雾浓度 / 缩放」三个控件竖着堆在右下角，占掉近 180px。 */
+.fog-opacity { background: var(--surface); padding: 6px 8px; line-height: 1.2; }
+.fog-opacity .fog-label {
+  display: block; text-align: left; border: 0; background: none; padding: 0;
+  font: inherit; font-size: 11px; color: var(--text-2); cursor: default;
+}
+.fog-opacity .fog-slider { display: block; width: 96px; margin: 4px 0 0; accent-color: var(--accent); }
+@media (max-width: 620px) {
+  .fog-opacity .fog-label { cursor: pointer; font-size: 12px; }
+  .fog-opacity .fog-slider { display: none; }
+  .fog-opacity.open .fog-slider { display: block; }
+}
+
+/* 长列表划到底后的「回到顶部」。地图页不滚动，所以它不会出现。 */
+.to-top {
+  position: fixed; right: calc(16px + var(--safe-r)); bottom: calc(20px + var(--safe-b)); z-index: 900;
+  width: 44px; height: 44px; border-radius: 50%; border: 1px solid var(--line);
+  background: var(--panel); color: var(--text-2); font-size: 20px; line-height: 1;
+  cursor: pointer; box-shadow: var(--shadow);
+}
+.to-top[hidden] { display: none; }
+.to-top:hover { color: var(--text); border-color: var(--text-3); }
+
+/* 时间轴回放时新出现的点：冒出来 + 淡入（配合 JS 里的逐个延时，像"扫过来"）。
+   点在 Leaflet 里是 overlay pane 里的 <path>，用 transform-box: fill-box 让缩放以自身
+   中心为原点，才不会跑到左上角去。 */
+@media (prefers-reduced-motion: no-preference) {
+  @keyframes pt-in {
+    from { opacity: .1; transform: scale(.2); }
+    55%  { opacity: 1; }
+    to   { opacity: .9; transform: scale(1); }
+  }
+  .leaflet-overlay-pane path.pt-new {
+    animation: pt-in .55s cubic-bezier(.22, .9, .28, 1) both;
+    transform-box: fill-box;
+    transform-origin: center;
+  }
+  /* 聚合圆圈是 DOM 元素、而且 Leaflet 用 transform 给它定位，
+     所以只能动透明度 —— 再加 scale 会把它从原位挪走。 */
+  @keyframes pt-in-dom {
+    from { opacity: .1; }
+    60%  { opacity: 1; }
+    to   { opacity: .92; }
+  }
+  .leaflet-marker-pane .marker-cluster.pt-new {
+    animation: pt-in-dom .5s ease-out both;
+  }
+  /* 数字变了轻弹一下：弹内层 div（只放数字），外层带 Leaflet 的定位 transform 不能动 */
+  @keyframes pt-pulse {
+    0%   { transform: scale(1); }
+    45%  { transform: scale(1.3); }
+    100% { transform: scale(1); }
+  }
+  .leaflet-marker-pane .marker-cluster > div.pt-pulse {
+    animation: pt-pulse .32s ease-out;
+  }
+}
+
+/* 时间轴回放：地图底部中间的一条。窄屏上抬高一档，给右下角的底图版权让位。
+   和左侧的日期区间不是一回事——区间是「只看这段时间」，这里是「走到这一刻为止」。 */
+.timeline-bar {
+  position: absolute; left: 50%; transform: translateX(-50%);
+  bottom: 12px; z-index: 650;
+  display: flex; align-items: center; gap: 10px;
+  max-width: min(560px, calc(100% - 24px));
+  padding: 7px 12px; border-radius: 10px;
+  background: var(--glass-strong); border: 1px solid var(--line); box-shadow: var(--shadow);
+  backdrop-filter: blur(8px);
+}
+.timeline-bar[hidden] { display: none; }
+.timeline-bar input[type=range] { flex: 1 1 auto; min-width: 90px; accent-color: var(--accent); margin: 0; }
+.timeline-bar .tl-label { flex: 0 0 auto; font-size: 12px; color: var(--text-3); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.timeline-bar button {
+  flex: 0 0 auto; border: 1px solid var(--line); background: var(--surface); color: var(--text);
+  border-radius: 7px; cursor: pointer; font: inherit; font-size: 12px; line-height: 1;
+}
+.timeline-bar .tl-play { width: 30px; height: 30px; font-size: 13px; padding: 0; }
+.timeline-bar .tl-reset { padding: 7px 9px; }
+.timeline-bar button:hover { background: var(--line-soft); }
+@media (max-width: 620px) {
+  .timeline-bar { bottom: 26px; gap: 8px; padding: 6px 9px; }
+  .timeline-bar .tl-label { font-size: 11.5px; }
+}
+
+/* 地图上的状态条（加载失败 + 重试）。放底部中间：左上角是筛选面板、右下是图例与版权。 */
+.map-status {
+  position: absolute; left: 50%; transform: translateX(-50%);
+  bottom: 62px;
+  z-index: 600; display: flex; align-items: center; gap: 10px;
+  max-width: calc(100% - 24px); background: rgba(30,40,50,.92); color: #fff;
+  border-radius: 8px; padding: 8px 12px; font-size: 13px; box-shadow: var(--shadow);
+}
+.map-status[hidden] { display: none; }
+.map-status .btn { border-color: rgba(255,255,255,.35); background: rgba(255,255,255,.12); color: #fff; flex: 0 0 auto; }
+.map-status .btn:hover { background: rgba(255,255,255,.22); }
+@media (max-width: 620px) {
+  .map-panel { left: 8px; right: 8px; width: auto; max-height: 44%; top: 8px; }
+  .map-legend { display: none; }
+}
+.map-preview { height: 320px; border-radius: 8px; overflow: hidden; border: 1px solid var(--line); }
+
+/* ---------- 地点图片 ---------- */
+/* 管理面板里的缩略图墙 */
+.imgs-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 8px; }
+.imgs-cell { position: relative; margin: 0; border-radius: 8px; overflow: hidden; border: 1px solid var(--line); background: var(--line-soft); aspect-ratio: 4 / 3; }
+.imgs-cell img { width: 100%; height: 100%; object-fit: cover; display: block; cursor: zoom-in; }
+.imgs-del {
+  position: absolute; top: 5px; right: 5px; width: 22px; height: 22px; border-radius: 50%;
+  border: 0; background: rgba(0,0,0,.55); color: #fff; font-size: 15px; line-height: 1;
+  cursor: pointer; display: flex; align-items: center; justify-content: center;
+}
+.imgs-del:hover { background: #b42318; }
+.imgs-busy { opacity: .45; pointer-events: none; }
+.imgs-hint { font-size: 12.5px; color: var(--text-3); margin-top: 8px; min-height: 18px; }
+.imgs-hint.ok { color: #17604f; }
+.imgs-hint.err { color: #b42318; }
+/* 存储没配好时把「选择图片」变成不可点的样子，而不是留个能点但必失败的按钮 */
+.btn.is-disabled { opacity: .5; cursor: not-allowed; }
+
+/* 展示用：全屏画廊。深色底是为了不干扰照片本身，白底会把照片衬灰。
+   一次只看一张 —— 以前把图竖着堆起来，手机上既不能左右滑也不能放大。 */
+.imgs-modal { position: fixed; inset: 0; z-index: 2000; background: rgba(12,14,16,.94); overflow: hidden; }
+.imgs-modal[hidden] { display: none; }
+.imgs-stage {
+  position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+  overflow: auto; padding: calc(56px + var(--safe-t)) calc(14px + var(--safe-r)) calc(24px + var(--safe-b)) calc(14px + var(--safe-l));
+  /* 横滑留给我们做切换，纵向留给浏览器；pinch-zoom 让双指放大仍可用系统手势 */
+  touch-action: pan-y pinch-zoom;
+}
+.imgs-stage img { display: block; max-width: 100%; max-height: 100%; width: auto; height: auto; border-radius: 8px; }
+/* 双击放大：图放大到两倍、容器可拖动看局部（用尺寸而不是 transform，放大后不糊） */
+.imgs-stage.zoomed { touch-action: pan-x pan-y; align-items: flex-start; justify-content: flex-start; }
+.imgs-stage.zoomed img { max-width: none; max-height: none; width: 200%; border-radius: 0; }
+.imgs-close {
+  position: fixed; top: calc(12px + var(--safe-t)); right: calc(14px + var(--safe-r)); z-index: 2001;
+  width: 44px; height: 44px; border-radius: 50%;
+  border: 1px solid rgba(255,255,255,.3); background: rgba(0,0,0,.4); color: #fff; font-size: 22px;
+  line-height: 1; cursor: pointer;
+}
+.imgs-close:hover { background: rgba(255,255,255,.18); }
+.imgs-count {
+  position: fixed; top: calc(20px + var(--safe-t)); left: calc(18px + var(--safe-l)); z-index: 2001;
+  color: rgba(255,255,255,.78); font-size: 13px;
+}
+/* 上一张 / 下一张：做成整条竖带，拇指够得着，不用瞄小按钮 */
+.imgs-nav {
+  position: fixed; top: 50%; transform: translateY(-50%); z-index: 2001;
+  width: 44px; height: 76px; border: 0; border-radius: 10px; cursor: pointer;
+  background: rgba(255,255,255,.12); color: #fff; font-size: 30px; line-height: 1;
+}
+.imgs-nav:hover { background: rgba(255,255,255,.24); }
+.imgs-prev { left: calc(6px + var(--safe-l)); }
+.imgs-next { right: calc(6px + var(--safe-r)); }
+
+/* ---------- 「停一下」提示页（内容对访客不开放之类） ---------- */
+.notice-body {
+  min-height: 100vh; margin: 0; display: flex; align-items: center; justify-content: center;
+  padding: 24px 18px; background: var(--bg);
+}
+.notice-card {
+  max-width: 420px; text-align: center; background: var(--panel); border: 1px solid var(--line);
+  border-radius: var(--radius); padding: 30px 26px; box-shadow: var(--shadow);
+}
+.notice-card .notice-ico { font-size: 40px; line-height: 1; margin-bottom: 12px; }
+.notice-card h1 { font-size: 18px; margin: 0 0 8px; }
+.notice-card p { color: var(--text-2); font-size: 13.5px; margin: 0 0 18px; }
+.notice-card .notice-tip { color: var(--text-3); font-size: 12px; margin-top: 12px; }
+
+/* 后台设置页的「标签 / 值」信息行（地图底图、图片存储状态）。
+   这个 class 一直没写样式，之前是两段光秃秃的 inline 文本；长一点的 URL
+   （比如对象存储的 endpoint）会把整页撑宽 —— 所以要 minmax(0,1fr) + 允许断词。 */
+.kv { display: grid; grid-template-columns: 88px minmax(0, 1fr); gap: 4px 12px; font-size: 13px; }
+.kv .k { color: var(--text-3); }
+.kv .v { color: var(--text); overflow-wrap: anywhere; }
+@media (max-width: 620px) {
+  .kv { grid-template-columns: 1fr; gap: 2px; }
+  .kv .k { font-size: 12px; }
+}
+/* URL 这类超长 token 不该把容器顶宽 */
+.mono { overflow-wrap: anywhere; }
+
+/* ---------- 暗色模式 ----------
+   跟随系统（prefers-color-scheme）。配色本来就是变量驱动的，所以这里主要换一套变量，
+   再覆盖几处硬编码的白色面。地图瓦片保持浅色——上游只有这一套免密钥瓦片，
+   所以地图页只暗掉面板与控件，瓦片不动。
+   色值是算过的：主文字 13.6:1、次要 8.0:1、弱化 5.4:1（都在 AA 之上）。 */
+@media (prefers-color-scheme: dark) {
+  /* 用 html:root 而不是 :root：模板会在 CSS 之后注入一条 :root{--accent:…}（站长自定义主色），
+     同特异性下后者胜出，所以这里必须高一级才盖得住。 */
+  html:root {
+    /* 站长选的主色原值在深底上往往太暗（深绿只有 3.3:1），按比例掺白提亮 */
+    --accent: color-mix(in srgb, var(--accent-base, #2f7d6e) 58%, #ffffff);
+    --accent-soft: color-mix(in srgb, var(--accent-base, #2f7d6e) 24%, #1c2024);
+    --bg: #14171a;
+    --panel: #1c2024;
+    --line: #2b3137;
+    --line-soft: #23272c;
+    --text: #e8eaed;
+    --text-2: #b0b6bd;
+    --text-3: #99a0a8;
+    --surface: #22262b;
+    --glass: rgba(28, 32, 36, .92);
+    --glass-strong: rgba(28, 32, 36, .96);
+    --row-hover: #212529;
+    --bg-2: #191d21;
+    /* 浅绿底上用白字只有 2.4:1，反过来用深字才够 */
+    --on-accent: #0f1b18;
+    --ok-bg: #16302a;  --ok-fg: #7fd3bb;  --ok-line: #245046;
+    --err-bg: #33201e; --err-fg: #f0a49b; --err-line: #5a3330;
+    --info-bg: #1b2534; --info-fg: #9dbdea; --info-line: #2f4055;
+    --shadow: 0 1px 2px rgba(0, 0, 0, .45), 0 1px 3px rgba(0, 0, 0, .35);
+  }
+  /* 兜底：还有两处没走变量的白底 */
+  .flatpickr-calendar { background: var(--panel); border-color: var(--line); box-shadow: var(--shadow); }
+  .flatpickr-day { color: var(--text); }
+  .flatpickr-day.prevMonthDay, .flatpickr-day.nextMonthDay { color: var(--text-3); }
+  .flatpickr-day:hover { background: var(--line-soft); color: var(--text); }
+  .flatpickr-months .flatpickr-month, .flatpickr-weekdays, .flatpickr-weekday { color: var(--text-2); fill: var(--text-2); background: transparent; }
+  .flatpickr-current-month .flatpickr-monthDropdown-months { background: var(--panel); color: var(--text); }
+  .flatpickr-time input, .flatpickr-time .flatpickr-am-pm { color: var(--text); }
+  /* Leaflet 自带的控件是白底，暗色下要跟着换，否则浅字压浅底看不清。
+     注意 leaflet.css 里角标的背景写的是 `.leaflet-container .leaflet-control-attribution`
+     （两级），所以这里必须带上 .leaflet-container 前缀，否则盖不住。 */
+  .leaflet-container .leaflet-bar a,
+  .leaflet-container .leaflet-bar a:hover,
+  .leaflet-container .leaflet-control-layers,
+  .leaflet-container .leaflet-control-layers-expanded,
+  .leaflet-container .leaflet-control-attribution,
+  .fog-opacity {
+    background: var(--surface); color: var(--text);
+  }
+  .leaflet-container .leaflet-bar a { border-bottom-color: var(--line); }
+  .leaflet-container .leaflet-bar a:hover { background: var(--line-soft); }
+  .leaflet-container .leaflet-control-attribution,
+  .leaflet-container .leaflet-control-attribution a { color: var(--text-2); }
+  .leaflet-control-scale-line {
+    background: rgba(28, 32, 36, .7); border-color: var(--text-3); color: var(--text-2);
+  }
+  .leaflet-container { background: #101315; }
+  /* 地图上的浅色瓦片在暗色 UI 里反差过大，整体压一点点亮度 */
+  #map .leaflet-tile-pane { filter: brightness(.86) saturate(.9); }
+}
+
+/* ---------- 键盘焦点 ----------
+   全站原来没有任何 :focus-visible 规则：用 Tab 走查时看不出焦点落在哪，
+   键盘用户（以及用读屏的）基本没法用。只在键盘操作时出现，鼠标点击不会看到这个圈。 */
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.btn:focus-visible, .chip:focus-visible, .vote-btn:focus-visible,
+.nav-links a:focus-visible, .pager a:focus-visible, .imgs-nav:focus-visible, .to-top:focus-visible {
+  outline: 2px solid var(--accent); outline-offset: 2px;
+}
+/* 输入框本来就有 focus 描边，这里只补键盘态的对比度 */
+input:focus-visible, select:focus-visible, textarea:focus-visible, summary:focus-visible {
+  outline: 2px solid var(--accent); outline-offset: 1px;
+}
+
+/* ---------- 顶部加载进度条 ---------- */
+.load-bar {
+  position: fixed; top: 0; left: 0; height: 2px; width: 0; z-index: 3000;
+  background: var(--accent); opacity: 0;
+  transition: width .18s ease-out, opacity .26s ease;
+}
+.load-bar[hidden] { display: none; }
+
+/* ---------- 「已选条件」行 ---------- */
+.active-filters { margin-bottom: 12px; align-items: center; }
+.active-filters .af-label { font-size: 12.5px; color: var(--text-3); }
+.active-filters .chip { user-select: none; }
+.active-filters .af-x { margin-left: 4px; opacity: .6; font-size: 13px; }
+.active-filters .chip:hover .af-x { opacity: 1; }
+.active-filters .af-clear { background: transparent; color: var(--text-3); border-color: var(--line); }
+
+/* ---------- 其他 ---------- */
+.alert { padding: 9px 13px; border-radius: 8px; font-size: 13px; margin-bottom: 14px; }
+.alert.err { background: var(--err-bg); color: var(--err-fg); border: 1px solid var(--err-line); }
+.alert.ok { background: var(--ok-bg); color: var(--ok-fg); border: 1px solid var(--ok-line); }
+.alert.info { background: var(--info-bg); color: var(--info-fg); border: 1px solid var(--info-line); }
+.muted { color: var(--text-3); }
+.mono { font-family: var(--mono); font-size: 12px; }
+.empty { text-align: center; padding: 40px 16px; color: var(--text-3); }
+.empty .big { font-size: 30px; margin-bottom: 8px; }
+.pager { display: flex; gap: 6px; align-items: center; justify-content: center; margin-top: 18px; font-size: 13px; }
+.pager a, .pager span { padding: 4px 10px; border-radius: 6px; border: 1px solid var(--line); color: var(--text-2); }
+.pager a:hover { background: var(--line-soft); text-decoration: none; }
+.pager .cur { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+footer.ft { max-width: 1120px; margin: 0 auto; padding: 20px; color: var(--text-3); font-size: 12.5px; text-align: center; }
+.timeline-day { margin-bottom: 20px; }
+.timeline-day .dh {
+  position: sticky; top: 54px; background: var(--bg); z-index: 5; padding: 6px 0 7px;
+  font-size: 13px; color: var(--text-2); font-weight: 500; display: flex; gap: 8px; align-items: baseline;
+}
+.timeline-day .dh .muted { font-size: 12px; }
+.tl-item { display: grid; grid-template-columns: 62px 20px 1fr; gap: 10px; align-items: start; padding: 7px 0; }
+.tl-item .tm { color: var(--text-3); font-size: 12.5px; font-variant-numeric: tabular-nums; padding-top: 1px; }
+.tl-item .ln { display: flex; justify-content: center; position: relative; }
+.tl-item .ln::before { content: ""; position: absolute; top: 12px; bottom: -12px; width: 1px; background: var(--line); }
+.tl-item:last-child .ln::before { display: none; }
+.tl-item .ln i { width: 9px; height: 9px; border-radius: 50%; background: var(--accent); margin-top: 5px; position: relative; z-index: 1; }
+.tl-item .bd { font-size: 13.5px; }
+.tl-item .bd .meta { color: var(--text-3); font-size: 12.5px; }
+
+/* 聚合气泡改用主题色，默认的黄蓝配色和站点风格不一致 */
+.marker-cluster-small,
+.marker-cluster-medium,
+.marker-cluster-large { background-color: color-mix(in srgb, var(--accent) 22%, transparent); }
+.marker-cluster-small div,
+.marker-cluster-medium div,
+.marker-cluster-large div { background-color: var(--accent); color: var(--on-accent); font-weight: 500; }
+
+/* 筛选面板占据左上角，把缩放控件挪到右上与图层切换并列 */
+.map-panel { left: 12px; }
+@media (max-width: 620px) { .map-panel { left: 8px; right: 8px; } }
+
+/* 更多筛选类型 */
+.more-types { margin: 2px 0 10px; }
+.more-types summary { font-size: 12.5px; color: var(--text-3); cursor: pointer; padding: 3px 0; }
+.more-types summary:hover { color: var(--accent); }
+.more-types .chips { margin-top: 8px; }
+
+@media (max-width: 620px) {
+  .leaflet-bottom.leaflet-right .leaflet-control-zoom { margin-bottom: 34px; }
+}
+
+/* 推荐 / 踩雷 表态按钮 */
+.vote-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
+.vote-label { color: var(--text-3); font-size: 12.5px; min-width: 62px; }
+/* 「推荐 / 踩雷」必须并排：把它们包成不可换行的组，窄屏时只让后面那句提示换行 */
+.vote-btns { display: inline-flex; gap: 8px; flex-wrap: nowrap; }
+.vote-btn {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 6px 14px; border-radius: 999px; white-space: nowrap; flex: 0 0 auto;
+  border: 1px solid var(--line); background: var(--surface); color: var(--text);
+  font-size: 13.5px; font-weight: 500; cursor: pointer; line-height: 1;
+  transition: background .12s, border-color .12s, color .12s;
+}
+.vote-btn:hover { border-color: var(--accent); color: var(--accent); }
+.vote-btn.up.on { background: #e7f6ec; border-color: #34c759; color: #1f8f43; }
+.vote-btn.down.on { background: #fdeceb; border-color: #ff3b30; color: #c62a20; }
+@media (prefers-color-scheme: dark) {
+  /* 浅底深字在深色页里太扎眼，换成深底亮字（对比度都在 AA 之上） */
+  .vote-btn.up.on { background: #16302a; border-color: #34c759; color: #7fd3bb; }
+  .vote-btn.down.on { background: #33201e; border-color: #ff3b30; color: #f0a49b; }
+  .vote-tip.up { color: #7fd3bb; }
+  .vote-tip.down { color: #f0a49b; }
+  /* 深红字在深底上只有 2.3:1，换成亮红 */
+  .btn.danger { color: var(--err-fg); border-color: var(--err-line); }
+}
+.vote-btn:disabled { opacity: .55; cursor: default; }
+.vote-tip { font-size: 12.5px; color: var(--text-3); }
+.vote-tip.up { color: #1f8f43; }
+.vote-tip.down { color: #c62a20; }
+/* 站长页面上访客票数只读展示：沿用「我的结论」同一套行结构，尺寸/行距完全一致，只弱化配色 */
+.vote-btn.ro {
+  cursor: default; color: var(--text-2);
+  border-style: dashed; border-color: var(--line); background: transparent;
+}
+.vote-btn.ro:hover { border-color: var(--line); color: var(--text-2); }
+/* 列表 / 气泡里的推荐踩雷小标签 */
+/* 坐标疑似没做过 GCJ-02 偏移的提醒标 */
+.tag.warn { background: #fdf3e3; color: #a15c00; }
+.tag.vote-up { background: #e7f6ec; color: #1f8f43; }
+.tag.vote-down { background: #fdeceb; color: #c62a20; }
+
+/* 地图气泡：地点信息 + 只读备注 + 就地表决 */
+.mp { min-width: 240px; max-width: 300px; }
+.mp-n { font-weight: 600; margin-bottom: 2px; }
+.mp-m { color: var(--text-3); font-size: 12px; line-height: 1.6; }
+.mp-note {
+  margin-top: 6px; padding: 6px 8px; border-radius: 6px;
+  background: var(--bg, #f5f6f8); color: var(--text);
+  font-size: 12.5px; line-height: 1.55; white-space: pre-line;
+  max-height: 150px; overflow-y: auto;
+}
+.mp-foot { margin-top: 7px; font-size: 12.5px; }
+/* nowrap：气泡本来就窄，「👎 踩雷」被挤到第二行会很难看 */
+.mp-vote { display: flex; align-items: center; gap: 6px; margin-top: 8px; flex-wrap: nowrap; }
+.mp-vl { flex: 0 0 auto; color: var(--text-3); font-size: 12px; white-space: nowrap; }
+.mp-vb {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 4px 10px; border-radius: 999px;
+  border: 1px solid var(--line); background: var(--surface); color: var(--text);
+  font-size: 12.5px; font-weight: 500; line-height: 1; cursor: pointer;
+  flex: 0 0 auto; white-space: nowrap;
+  transition: background .12s, border-color .12s, color .12s;
+}
+.mp-vb b { font-weight: 600; }
+.mp-vb:hover { border-color: var(--accent); color: var(--accent); }
+.mp-vb.up.on { background: #e7f6ec; border-color: #34c759; color: #1f8f43; }
+.mp-vb.down.on { background: #fdeceb; border-color: #ff3b30; color: #c62a20; }
+.mp-vb:disabled { opacity: .55; cursor: default; }
+
+/* 备注块：rond 回填的备注是按次一行的，必须保留换行 */
+.note-block {
+  margin-top: 4px; padding: 7px 9px; border-radius: 8px;
+  background: var(--bg, #f5f6f8); color: var(--text-2);
+  font-size: 12.8px; line-height: 1.65; white-space: pre-line;
+}
+
+/* 报告导出为 PDF / 长图：隐藏导航、页脚与操作按钮，卡片避免跨页断裂 */
+@media print {
+  .nav, .ft, .no-print { display: none !important; }
+  body { background: #fff; }
+  .wrap { max-width: 820px; margin: 0 auto; padding: 0 12px; }
+  .page-head h1 { margin-top: 8px; }
+  .card, .kpi, .kpis { break-inside: avoid; }
+  .grid.g2 { grid-template-columns: 1fr 1fr; }
+  a { color: inherit; text-decoration: none; }
+  .bar-fill { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  .chip.on { background: var(--accent-soft); color: var(--accent); }
+}
+
+
+/* 数据编辑页：行内编辑用 details 折叠，summary 复用 .btn 外观 */
+.inline-edit { display: inline-block; position: relative; }
+.inline-edit summary { list-style: none; display: inline-block; }
+.inline-edit summary::-webkit-details-marker { display: none; }
+.inline-edit[open] { display: block; }
+.inline-edit form { background: var(--bg-2, #fafbfb); border: 1px solid var(--line); border-radius: 10px; padding: 12px; }
+.inline-edit form .f { margin-bottom: 8px; }
+
+/* 「按名称搜坐标」输入框 + 按钮：必须始终同一行（含移动端），底边对齐。
+ * 不能直接复用 .row —— label.f 自带 margin-bottom，flex-end 按外边距盒对齐会把它顶高；
+ * 且 .row 会换行。这里显式 nowrap + 归零外边距，并让输入框可收缩。 */
+.search-row { display: flex; flex-wrap: nowrap; align-items: flex-end; gap: 8px; margin-bottom: 12px; }
+.search-row > label.f { flex: 1 1 auto; min-width: 0; margin-bottom: 0; }
+.search-row .btn { flex: 0 0 auto; font-size: 14px; }
+.search-row > .act { display: flex; flex: 0 0 auto; gap: 8px; }
+
+/* 按名称搜坐标的候选列表：整行可点，名称与地址分两行 */
+.geo-list { display: flex; flex-direction: column; gap: 4px; margin: 0 0 12px; }
+/* 到访选择器的候选列表有 max-height（200~240px），但 flex 子项不会因为上限而收缩、
+   overflow 又是 visible —— 30 条候选会实打实溢出上千像素，被后面的表单元素盖住。
+   必须给个 overflow 让它在自己的框里滚。 */
+.picker-results { overflow-y: auto; }
+.geo-list:empty { margin: 0; }
+/* 行程列表的路线列：窄屏下每列只剩几十像素，城市名会把行高撑到到访列表的近两倍，
+   藏掉它（编号 + 地点名够认了，城市在紧邻的到访列表里就有），title 里仍留着全称。 */
+@media (max-width: 620px) { .mv-city { display: none; } }
+
+/* 筛选行：和 .row 一样窄屏会换行，但控件按底边对齐。
+   不能直接用 .row + align-items:flex-end——label.f 自带 margin-bottom，
+   flex-end 按外边距盒对齐会把按钮顶低几像素（就是那种「按钮有点歪」）。 */
+.filter-row { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 8px; }
+.filter-row > label.f { margin-bottom: 0; }
+.filter-row > .act { display: flex; flex: 0 0 auto; gap: 8px; }
+.geo-item {
+  display: block; width: 100%; text-align: left; cursor: pointer;
+  padding: 7px 10px; border: 1px solid var(--line); border-radius: 8px;
+  background: var(--panel); color: var(--text); font: inherit;
+}
+.geo-item:hover { background: var(--line-soft); }
+.geo-name { display: block; font-size: 13.5px; }
+.geo-addr { display: block; color: var(--text-3); font-size: 12px; margin-top: 2px; }
+
+/* 「同时创建到访」折叠区 */
+.opt-visit { margin: 0 0 12px; }
+.opt-visit > summary { cursor: pointer; color: var(--text-3); font-size: 12.5px; margin-bottom: 8px; }
+.opt-visit .row { margin-bottom: 8px; }
+
+/* ---------- 专题 ---------- */
+/* 必须带上 #map：站点里 #map{height:100%} 是 ID 选择器，
+   单靠 .topic-map 这个类压不过它，容器会被算成 0 高（地图看不见）。 */
+#map.topic-map { height: 520px; width: 100%; border-radius: 10px; overflow: hidden; }
+@media (max-width: 620px) { #map.topic-map { height: 360px; } }
+.topic-card { display: block; text-decoration: none; color: inherit; transition: box-shadow .15s, transform .15s; }
+.topic-card:hover { box-shadow: 0 6px 22px rgba(0,0,0,.08); transform: translateY(-1px); }
+.topic-head { display: flex; align-items: center; gap: 8px; }
+.topic-head h2 { margin: 0; }
+.topic-card .kpis { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+@media (max-width: 620px) { .topic-card .kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+
+/* 地图兜底提示：脚本没就绪时留在容器里，解释为什么没有地图 */
+.map-fallback {
+  display: flex; align-items: center; justify-content: center; height: 100%;
+  padding: 20px; text-align: center; color: var(--text-3); font-size: 13px;
+}
+
+/* 专题：时间范围独立成行（精确到分钟，塞进 KPI 网格会被挤成多行） */
+.topic-range { margin-top: 5px; color: var(--text-2); font-size: 13.5px; font-variant-numeric: tabular-nums; }
+.topic-card .topic-range { margin: 7px 0 0; }
+.topic-desc { color: var(--text-2); white-space: pre-wrap; line-height: 1.65; }
+.kpis.kpis-3 .kpi { flex: 1 1 30%; }
+@media (max-width: 620px) {
+  /* 三个数字都很短，窄屏保持三列比 2+1 更好看 */
+  .topic-card .kpis.kpis-3 .kpi { flex: 1 1 30%; }
+  .topic-card .kpi { padding: 11px 12px; }
+  .topic-range { font-size: 12.5px; }
+}
+
+/* ---------- 表单里的「文字 + 内联按钮」组合 ---------- */
+/* label 的文字行右侧放次要操作（活动改名/删除），不额外占高度，也就不会把整格撑高 */
+label.f > span.span-actions { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.mini-actions { display: flex; gap: 8px; font-size: 12px; }
+.mini-actions a { color: var(--text-3); }
+.mini-actions a:hover { color: var(--accent); }
+.mini-actions a.danger:hover { color: #b42318; }
+/* 输入框 + 按钮同一行：input 自适应、按钮不压缩（不设 min-width:0 的话 input 会被按钮顶到下一行） */
+.input-btn { display: flex; gap: 6px; }
+.input-btn > input { flex: 1 1 auto; min-width: 0; }
+.input-btn > .btn { flex: 0 0 auto; padding-left: 12px; padding-right: 12px; }
+
+/* 到访列表里的收藏星标：点一下就切换，不用展开行内编辑 */
+.star {
+  background: none; border: 0; padding: 0 3px; cursor: pointer; line-height: 1;
+  font-size: 15px; color: var(--text-3); vertical-align: -1px;
+}
+.star:hover { color: #e8b700; }
+.star.on { color: #e8b700; }
+
+/* 单个点位的地图弹窗 */
+#point-modal {
+  position: fixed; inset: 0; z-index: 1200; display: flex; align-items: flex-start;
+  justify-content: center; padding: 40px 16px; overflow: auto;
+  background: rgba(0, 0, 0, .45);
+}
+.point-modal-box {
+  width: 100%; max-width: 660px; background: var(--panel); border-radius: 12px;
+  padding: 14px; box-shadow: 0 12px 40px rgba(0, 0, 0, .25);
+}
+.point-modal-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 10px; }
+.point-modal-map { height: 360px; border-radius: 10px; overflow: hidden; }
+@media (max-width: 620px) {
+  #point-modal { padding: 16px 10px; }
+  .point-modal-map { height: 260px; }
+}
+
+/* 表格里的行内操作链接不许折行：中文默认能在任意字间断开，
+   「地图」「编辑」这类两字链接在窄列里会被拆成两行 */
+.tb a { white-space: nowrap; }
+
+/* 照片导入表：固定列宽比例，输入框跟着列宽走。
+   否则每个 input 自带 min-width，8 列加起来必然超出视口，最右边的「说明」列要横向拖动才看得到 */
+.photo-table { table-layout: fixed; width: 100%; min-width: 880px; }
+.photo-table th, .photo-table td { padding: 7px 8px; vertical-align: top; }
+.photo-table input, .photo-table select { width: 100%; min-width: 0; box-sizing: border-box; }
+.photo-table input[type=datetime-local] { font-size: 12.5px; padding: 6px 6px; }
+.photo-table input[type=checkbox] { width: auto; }
+.photo-table .chip { white-space: nowrap; }
+
+/* 窄屏：9 列在手机上放不下，把信息量最低的「文件」列去掉（地点名已经能认出是哪张），
+   同时把最小宽度调小，需要横向滑动时也能更快看到最右边的操作 */
+@media (max-width: 700px) {
+  .photo-table { min-width: 640px; }
+  .photo-table col:nth-child(3),
+  .photo-table thead th:nth-child(3),
+  .photo-table tbody tr td:nth-child(3) { display: none; }
+}
+
+/* 照片导入：确认表上方的总览图。
+   做成「粘」的是为了让「鼠标划到某一行 → 图上那个点跳出来」始终看得见——
+   表格几十行，图一滚出屏幕这个联动就白搭了。粘住时必须自带不透明底，
+   否则下面滚过去的行会透上来。 */
+#map-card {
+  position: sticky; top: calc(var(--nav-h) + 8px); z-index: 5;
+  background: var(--panel); padding: 2px 0 10px; margin-bottom: 2px;
+  border-bottom: 1px solid var(--line-soft);
+}
+.photo-map {
+  height: 200px; width: 100%; border-radius: 10px; overflow: hidden;
+  border: 1px solid var(--line); transition: height .18s ease;
+}
+/* 粘住以后收矮：200px 的浮层会挡住从下面滚过去的半个屏幕，收到 132px 还能看清
+   高亮出来的那个点，占的高度也只剩一条。说明文字这时候就没必要留着了。 */
+#map-card.stuck .photo-map { height: 132px; }
+#map-card.stuck .card-sub { display: none; }
+#map-card.stuck { box-shadow: 0 6px 14px rgba(16, 24, 40, .07); }
+@media (max-width: 700px) {
+  .photo-map { height: 170px; }
+  #map-card.stuck .photo-map { height: 110px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .photo-map { transition: none; }
+}
+
+/* 照片导入的进度/结果提示：脚本直接往元素里写文本，空的时候自己收起 */
+#parse-status { margin: 12px 0 0; }
+#parse-status:empty { display: none; }

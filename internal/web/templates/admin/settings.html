@@ -1,0 +1,151 @@
+{{define "content"}}
+<div class="wrap">
+  <div class="page-head">
+    <div>
+      <h1>站点设置</h1>
+      <div class="sub">控制主页展示的模块、隐私处理与地图底图</div>
+    </div>
+    <div class="row"><a class="btn" href="/admin">← 返回后台</a></div>
+  </div>
+
+  {{if .Flash}}<div class="alert ok">设置已保存</div>{{end}}
+
+  <form method="post" action="/admin/settings">
+
+    <div class="card">
+      <h2>基本信息</h2>
+      <div class="card-sub">展示在主页顶部与浏览器标题</div>
+      <div class="grid g2">
+        <label class="f"><span>站点标题</span><input type="text" name="site_title" value="{{.Settings.SiteTitle}}" maxlength="40"></label>
+        <label class="f"><span>副标题</span><input type="text" name="site_subtitle" value="{{.Settings.SiteSubtitle}}" maxlength="80" placeholder="记录我去过的每一个地方"></label>
+        <label class="f"><span>署名</span><input type="text" name="owner_name" value="{{.Settings.OwnerName}}" maxlength="30"></label>
+        <label class="f"><span>头像（单个 emoji）</span><input type="text" name="owner_avatar" value="{{.Settings.OwnerAvatar}}" maxlength="8"></label>
+      </div>
+      <label class="f"><span>主色调</span>
+        <div class="row">
+          <input type="color" name="accent_color" value="{{.Settings.AccentColor}}" style="width:56px;height:34px;padding:2px">
+          <span class="muted">用于按钮、图表与选中状态</span>
+        </div>
+      </label>
+    </div>
+
+    <div class="card">
+      <h2>主页展示模块</h2>
+      <div class="card-sub">取消勾选的模块不会出现在主页上；一个都不选时按全部展示处理</div>
+      <div class="grid g2">
+        {{range .Modules}}
+        <label class="check">
+          <input type="checkbox" name="modules" value="{{.Key}}" {{if $.Settings.Has .Key}}checked{{end}}>
+          <span><b style="font-weight:500">{{.Name}}</b> <span class="muted">— {{.Desc}}</span></span>
+        </label>
+        {{end}}
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>公开页面</h2>
+      <div class="card-sub">控制访客能在导航里看到并访问哪些页面；你登录后始终可以访问全部页面</div>
+      <div class="grid g2">
+        {{range .Pages}}
+        <label class="check">
+          <input type="checkbox" name="pages" value="{{.Key}}" {{if $.Settings.HasPage .Key}}checked{{end}}>
+          <span><b style="font-weight:500">{{.Name}}</b> <span class="muted">— {{.Desc}}</span></span>
+        </label>
+        {{end}}
+      </div>
+      <div class="muted" style="font-size:12.5px;margin-top:8px">
+        关闭的页面在访客导航中隐藏，直接输入网址也会得到 404。主页不受此开关影响。
+      </div>
+      <label class="f" style="max-width:320px;margin-top:14px">
+        <span>访客默认页面</span>
+        <select name="visitor_home">
+          <option value="home" {{if eq .Settings.VisitorHome "home"}}selected{{end}}>主页（默认）</option>
+          {{range .Pages}}<option value="{{.Key}}" {{if eq $.Settings.VisitorHome .Key}}selected{{end}}>{{.Name}}</option>{{end}}
+        </select>
+      </label>
+      <div class="muted" style="font-size:12.5px;margin-top:6px">
+        访客访问站点根路径时直接落到这里；你登录后访问根路径仍然看主页。
+        选择了一个没对访客开放的页面时不会跳转（会留在主页）。
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>访客可见区域</h2>
+      <div class="card-sub">
+        一行一个，省 / 市 / 区都认（例如「广东省」「贵阳市」「南明区」）。
+        留空表示不限制，访客能看到全部数据；你自己登录后始终是全量。
+      </div>
+      <label class="check"><input type="radio" name="regions_mode" value="whitelist" {{if eq .Settings.RegionsMode "whitelist"}}checked{{end}}> 白名单：访客<span class="nobr">只能看到这些区域</span>的记录</label>
+      <label class="check"><input type="radio" name="regions_mode" value="blacklist" {{if eq .Settings.RegionsMode "blacklist"}}checked{{end}}> 黑名单：这些区域的记录<span class="nobr">对访客隐藏</span>，其余照常开放</label>
+      <label class="f" style="max-width:520px;margin-top:10px">
+        <span>区域列表</span>
+        <textarea name="regions" rows="5" placeholder="广东省&#10;贵阳市&#10;南明区">{{range .Settings.Regions}}{{.}}
+{{end}}</textarea>
+      </label>
+    </div>
+
+    <div class="card">
+      <h2>隐私处理</h2>
+      <div class="card-sub">「家」和「工作」通常是敏感位置，默认已隐藏</div>
+      <label class="check"><input type="checkbox" name="hide_home" {{if .Settings.HideHome}}checked{{end}}> 隐藏类型为「家」的记录</label>
+      <label class="check"><input type="checkbox" name="hide_work" {{if .Settings.HideWork}}checked{{end}}> 隐藏类型为「工作」的记录</label>
+      <label class="check"><input type="checkbox" name="notes_public" {{if .Settings.NotesPublic}}checked{{end}}> 地点备注对访客公开（不勾选则只有你自己能看到）</label>
+      <label class="check"><input type="checkbox" name="marks_public" {{if .Settings.MarksPublic}}checked{{end}}> 「推荐 / 踩雷」标记与票数对访客公开</label>
+      <div class="muted" style="font-size:12.5px">
+        隐藏后匿名访客看不到这两类记录。你登录后可在任意公开页面用筛选器上的
+        <span class="mono">含家/工作</span> 开关临时显示给自己看。
+      </div>
+      <label class="f" style="max-width:280px;margin-top:12px">
+        <span>忽略停留时间过短的记录</span>
+        <select name="min_dwell_min">
+          <option value="0" {{if eq .Settings.MinDwellMin 0}}selected{{end}}>不过滤</option>
+          <option value="2" {{if eq .Settings.MinDwellMin 2}}selected{{end}}>少于 2 分钟</option>
+          <option value="5" {{if eq .Settings.MinDwellMin 5}}selected{{end}}>少于 5 分钟</option>
+          <option value="10" {{if eq .Settings.MinDwellMin 10}}selected{{end}}>少于 10 分钟</option>
+        </select>
+      </label>
+      <div class="muted" style="font-size:12.5px">该设置作用于全站统计与地图，可有效过滤路过点。</div>
+    </div>
+
+    <div class="card">
+      <h2>地图底图</h2>
+      <div class="card-sub">在 <span class="mono">conf/app.ini</span> 中配置，改完重启生效</div>
+      <div class="kv"><span class="k">当前生效</span><span class="v">{{.MapInfo}}</span></div>
+      {{if .MapLayers}}
+      <label class="f" style="max-width:340px;margin-top:10px"><span>默认用哪张底图</span>
+        <select name="map_default_base">
+          <option value="" {{if not .Settings.MapDefaultBase}}selected{{end}}>跟随第一张（{{(index .MapLayers 0).Label}}）</option>
+          {{range .MapLayers}}<option value="{{.Key}}" {{if eq .Key $.Settings.MapDefaultBase}}selected{{end}}>{{.Label}}</option>{{end}}
+        </select>
+      </label>
+      <div class="card-sub" style="margin-top:0">放大后底图自带的 POI 与路名标注太密、看不清自己的点时，换成<b>纯路网</b>。
+        访客在地图上手动切换过的话，浏览器会记住他自己的选择。</div>
+      {{end}}
+      <div class="muted" style="font-size:12.5px;margin-top:8px">
+        <div><span class="mono">map_provider</span>：<span class="mono">amap</span>（默认，免密钥）/ <span class="mono">tianditu</span>（需 <span class="mono">map_key</span>）/ <span class="mono">custom</span>（自备 <span class="mono">map_tile_url</span>）</div>
+        <div><span class="mono">map_key</span>：填写后瓦片改由服务端代理，密钥不会出现在页面源码里。</div>
+        <div><span class="mono">map_crs</span>：仅 <span class="mono">custom</span> 使用，填 <span class="mono">gcj02</span> 或 <span class="mono">wgs84</span>；站点数据本身是 GCJ-02，换成 WGS-84 底图（天地图 / OSM）时会自动纠偏。</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>图片存储</h2>
+      <div class="card-sub">地点图片存到哪儿。图片在<b>浏览器里</b>转成 WebP 后才上传，服务器只负责收下与转存</div>
+      <label class="check"><input type="radio" name="media_backend" value="local" {{if ne .Settings.MediaBackend "s3"}}checked{{end}}> 服务器本地磁盘</label>
+      <label class="check"><input type="radio" name="media_backend" value="s3" {{if eq .Settings.MediaBackend "s3"}}checked{{end}}> 对象存储（S3 兼容，如 Cloudflare R2）</label>
+      <div class="kv" style="margin-top:8px"><span class="k">对象存储</span><span class="v">{{.S3Info}}</span></div>
+      <div class="muted" style="font-size:12.5px;margin-top:8px">
+        <div>凭据放在 <span class="mono">conf/app.ini</span>，不进数据库、也不会下发到前端：</div>
+        <div><span class="mono">s3_endpoint</span>（R2 形如 <span class="mono">https://&lt;账号&gt;.r2.cloudflarestorage.com</span>）、<span class="mono">s3_bucket</span>、<span class="mono">s3_access_key</span>、<span class="mono">s3_secret_key</span>、<span class="mono">s3_region</span>（R2 填 <span class="mono">auto</span>）。</div>
+        <div><span class="mono">s3_public_base</span>：桶的公开域名（自定义域或 r2.dev），拼上对象名就是 <span class="mono">&lt;img src&gt;</span>；不填的话图片存得进去但浏览器取不到。</div>
+        <div>改了 <span class="mono">conf/app.ini</span> 需要重启；这里的「存哪边」保存后立即生效，已经存过的老图仍按各自原来的位置取，不受影响。</div>
+      </div>
+    </div>
+
+    <div class="row">
+      <button class="btn primary" type="submit">保存设置</button>
+      <a class="btn" href="/admin">取消</a>
+    </div>
+  </form>
+</div>
+{{end}}

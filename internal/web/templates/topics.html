@@ -1,0 +1,33 @@
+{{define "content"}}
+<div class="wrap">
+  <div class="page-head">
+    <div>
+      <h1>专题</h1>
+      <div class="sub">把某段时间、某个区域的足迹整理成一个个小专题</div>
+    </div>
+    {{if .IsAdmin}}<div class="row"><a class="btn" href="/admin/topics">专题管理</a></div>{{end}}
+  </div>
+
+  {{if .Topics}}
+  <div class="grid g2">
+    {{range .Topics}}
+    <a class="card topic-card" href="/topics/{{.ID}}">
+      <div class="topic-head">
+        <h2>{{.Title}}</h2>
+        {{if not .Enabled}}<span class="tag">未展示</span>{{end}}
+      </div>
+      {{if .Subtitle}}<div class="card-sub">{{.Subtitle}}</div>{{end}}
+      <div class="topic-range">{{.RangeLabel}}</div>
+      <div class="kpis kpis-3" style="margin-top:10px">
+        <div class="kpi"><div class="k">地点</div><div class="v">{{num .PlaceCount}}</div></div>
+        <div class="kpi"><div class="k">到访</div><div class="v">{{num .VisitCount}}</div></div>
+        <div class="kpi"><div class="k">天数</div><div class="v">{{num .DayCount}}</div></div>
+      </div>
+    </a>
+    {{end}}
+  </div>
+  {{else}}
+  <div class="card"><div class="empty">还没有对外展示的专题</div></div>
+  {{end}}
+</div>
+{{end}}

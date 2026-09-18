@@ -1,0 +1,97 @@
+{{define "content"}}
+{{if not .HasData}}
+<div class="wrap">{{template "emptystate" .}}</div>
+{{else}}
+<div class="wrap">
+  <div class="page-head">
+    <div>
+      <h1>{{.Topic.Title}}</h1>
+      {{if .Topic.Subtitle}}<div class="sub">{{.Topic.Subtitle}}</div>{{end}}
+      {{/* 时间范围独立成行：塞进 KPI 网格里会被挤成好几行 */}}
+      <div class="topic-range">{{.Topic.RangeLabel}}{{if .Topic.DayCount}} · 共 {{num .Topic.DayCount}} 天{{end}}</div>
+    </div>
+    <div class="row">
+      <a class="btn" href="/topics">← 全部专题</a>
+      {{if .IsAdmin}}<a class="btn" href="/admin/topics?edit={{.Topic.ID}}">编辑</a>{{end}}
+    </div>
+  </div>
+
+  {{if not .Topic.Enabled}}<div class="alert err">这个专题尚未对外展示，只有你自己能看到。</div>{{end}}
+
+  {{if .Topic.Description}}<div class="card topic-desc">{{.Topic.Description}}</div>{{end}}
+
+  <div class="card">
+    <div class="kpis">
+      <div class="kpi"><div class="k">{{if .Topic.HasArea}}区域内地点{{else}}地点{{end}}</div><div class="v">{{num .Topic.PlaceCount}}</div></div>
+      <div class="kpi"><div class="k">到访次数</div><div class="v">{{num .Topic.VisitCount}}</div></div>
+      <div class="kpi"><div class="k">涉及城市</div><div class="v">{{num .Topic.CityCount}}</div></div>
+      <div class="kpi"><div class="k">累计停留</div><div class="v">{{dur .Topic.DwellMin}}</div></div>
+    </div>
+  </div>
+
+  <div class="card" style="padding:10px">
+    {{/* 高度写 inline：站点里 #map{height:100%} 是 ID 选择器，只靠外部 CSS 类
+         容易在别处规则变动/缓存不一致时把容器算成 0 高，地图就整块消失 */}}
+    <div id="map" class="topic-map" style="height:520px">
+      <div id="map-fallback" class="map-fallback">地图加载中……若一直不出现，请强制刷新（Ctrl+F5）或检查浏览器是否拦截了地图脚本</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>去过的地方</h2>
+    <div class="card-sub">共 {{num .Topic.PlaceCount}} 个，按到访次数排序</div>
+    {{if .Points}}
+    <div class="tw">
+      <table class="tb">
+        <thead><tr><th>地点</th><th>城市</th><th>类型</th><th class="num">到访</th><th class="num">停留</th><th>最近一次</th></tr></thead>
+        <tbody>
+        {{range .Points}}
+          <tr>
+            <td>{{if .Name}}{{.Name}}{{else}}<span class="muted">（未命名）</span>{{end}}</td>
+            <td class="muted">{{.City}}</td>
+            <td class="muted">{{if .Act}}<span class="dot" style="background:{{colorof .Color}}"></span>{{.Act}}{{end}}</td>
+            <td class="num">{{num .Count}}</td>
+            <td class="num muted">{{dur .Dwell}}</td>
+            <td class="muted mono">{{.LastAt}}</td>
+          </tr>
+        {{end}}
+        </tbody>
+      </table>
+    </div>
+    {{else}}
+    <div class="empty">这个时间 / 区域范围内没有记录</div>
+    {{end}}
+  </div>
+</div>
+
+<script>
+(function () {
+  function whenReady(cb) {
+    if (document.readyState === 'complete') { setTimeout(cb, 0); return; }
+    window.addEventListener('load', cb);
+  }
+  whenReady(function () {
+    var el = document.getElementById('map');
+    // 移动端矮一些（inline 高度优先于外部 CSS，只能在这里按视口改）
+    if (el && window.matchMedia('(max-width: 620px)').matches) el.style.height = '360px';
+
+    if (window.rondMap) {
+      window.rondMap.full({
+        id: 'map',
+        points: {{.PointsJSON}},
+        fitCircle: {{.FitCircleJSON}},
+        fitBBox: {{.FitBBoxJSON}},
+        showFog: {{if .Topic.ShowFog}}true{{else}}false{{end}}
+      });
+    }
+
+    // 地图脚本没就绪（被拦 / 加载失败）时，把兜底提示留在原位，用户至少知道发生了什么
+    setTimeout(function () {
+      var fb = document.getElementById('map-fallback');
+      if (fb && el && el.classList.contains('leaflet-container')) fb.style.display = 'none';
+    }, 1200);
+  });
+})();
+</script>
+{{end}}
+{{end}}

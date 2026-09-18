@@ -1,0 +1,144 @@
+{{define "content"}}
+<div class="wrap">
+  <div class="page-head">
+    <div>
+      <h1>{{.Year}} 年度报告</h1>
+      <div class="sub">这一年的足迹，一目了然</div>
+    </div>
+    <div class="row no-print">
+      {{if .Years}}
+      <select onchange="location='/report?y='+this.value" style="min-width:110px">
+        {{range .Years}}<option value="{{.}}" {{if eq . $.Year}}selected{{end}}>{{.}} 年</option>{{end}}
+      </select>
+      {{end}}
+      <button class="btn" id="btn-share" type="button">复制链接</button>
+      <button class="btn primary" id="btn-pdf" type="button">保存为 PDF</button>
+    </div>
+  </div>
+
+  {{if not .HasData}}
+    {{template "emptystate" .}}
+  {{else if gt .Year 0}}
+    <div class="kpis" style="margin-bottom:16px">
+      <div class="kpi"><div class="v">{{num .Overview.Visits}}<small>次</small></div><div class="k">到访记录</div></div>
+      <div class="kpi"><div class="v">{{num .NewPlaces}}<small>个</small></div><div class="k">新地点</div></div>
+      <div class="kpi"><div class="v">{{num .Overview.Cities}}<small>个</small></div><div class="k">城市</div></div>
+      <div class="kpi"><div class="v">{{num .Overview.Provinces}}<small>个</small></div><div class="k">省级行政区</div></div>
+      <div class="kpi"><div class="v">{{num .Overview.Days}}<small>天</small></div><div class="k">活跃天数</div></div>
+      <div class="kpi"><div class="v">{{km .Overview.DistanceKm}}<small>km</small></div><div class="k">出行里程</div></div>
+    </div>
+
+    {{if .Cities}}
+    <div class="card" style="margin-bottom:16px">
+      <h2>🏅 首次到达的城市</h2>
+      <div class="card-sub">这一年里，你第一次踏足的这些城市（按到达日期排序）</div>
+      <div class="chips">
+        {{range .Cities}}
+        <span class="chip on" title="{{.Province}} · 首次到达 {{.First}}">
+          📍 {{.City}}<span class="muted"> · {{.First}}</span>
+        </span>
+        {{end}}
+      </div>
+    </div>
+    {{end}}
+
+    <div class="grid g2">
+      <div class="card">
+        <h2>去得最多的城市</h2>
+        <div class="card-sub">按到访次数</div>
+        {{if .TopCities}}
+        <div class="bars">
+          {{range $i, $c := .TopCities}}
+          <div class="bar-row">
+            <div class="nm"><span class="muted">{{add $i 1}}.</span> {{.City}}</div>
+            <div class="bar-track"><div class="bar-fill" style="width:{{pct .Count (index $.TopCities 0).Count}}%;background:var(--accent)"></div></div>
+            <div class="vv">{{num .Count}} 次</div>
+          </div>
+          {{end}}
+        </div>
+        {{else}}<div class="empty">这一年还没有到访记录</div>{{end}}
+      </div>
+
+      <div class="card">
+        <h2>南北两端</h2>
+        <div class="card-sub">这一年到过纬度最高与最低的地点</div>
+        {{if .North}}
+        <div class="tw">
+          <table class="tb">
+            <thead><tr><th>方位</th><th>地点</th><th class="num">纬度</th></tr></thead>
+            <tbody>
+              <tr><td>最北</td><td>{{.North.Name}}<span class="muted"> · {{.North.City}}</span></td><td class="num">{{f1 .North.Lat}}°N</td></tr>
+              {{if .South}}<tr><td>最南</td><td>{{.South.Name}}<span class="muted"> · {{.South.City}}</span></td><td class="num">{{f1 .South.Lat}}°N</td>{{end}}
+            </tbody>
+          </table>
+        </div>
+        {{else}}<div class="empty">这一年还没有到访记录</div>{{end}}
+      </div>
+    </div>
+
+    {{if .Transports}}
+    <div class="card">
+      <h2>在路上</h2>
+      <div class="card-sub">这一年 {{num .Overview.Movements}} 段行程，共 {{km .Overview.DistanceKm}} km</div>
+      <div class="tw">
+        <table class="tb">
+          <thead><tr><th>方式</th><th class="num">次数</th><th class="num">里程</th></tr></thead>
+          <tbody>
+            {{range .Transports}}
+            <tr>
+              <td><span class="dot" style="display:inline-block;background:{{colorof .Color}}"></span> {{with icon .Icon}}{{.}} {{end}}{{.Name}}</td>
+              <td class="num">{{num .Count}}</td>
+              <td class="num">{{km .Distance}} km</td>
+            </tr>
+            {{end}}
+          </tbody>
+        </table>
+      </div>
+    </div>
+    {{end}}
+
+    {{if .Fog}}
+    {{/* 这张卡原来只有一句说明、没有任何内容（本来想放地图但没接上），看着像坏了。
+       改成与统计页一致的四个数字；完整的迷雾视图在 /stats 与地图页。 */}}
+    <div class="card">
+      <h2>世界迷雾</h2>
+      <div class="card-sub">迷雾是累计数据，不按年份切分。</div>
+      <div class="kpis">
+        <div class="kpi"><div class="v">{{f1 .Fog.AreaKm2}}<small>km²</small></div><div class="k">已探索面积</div></div>
+        <div class="kpi"><div class="v">{{pct .Fog.LitPlaces .Fog.Places}}<small>%</small></div><div class="k">地点点亮率</div></div>
+        <div class="kpi"><div class="v">{{num .Fog.LitPlaces}}<small>/{{num .Fog.Places}}</small></div><div class="k">点亮地点</div></div>
+        <div class="kpi"><div class="v">{{num .Fog.Blocks}}<small>块</small></div><div class="k">迷雾快照</div></div>
+      </div>
+    </div>
+    {{end}}
+
+    <div class="row" style="justify-content:center;margin:8px 0 24px">
+      <a class="btn" href="/stats?from={{printf "%d-01-01" .Year}}&to={{printf "%d-12-31" .Year}}">查看这一年的完整统计 →</a>
+    </div>
+  {{else}}
+    <div class="card"><div class="empty">还没有数据</div></div>
+  {{end}}
+</div>
+<script>
+(function () {
+  var share = document.getElementById('btn-share');
+  var pdf = document.getElementById('btn-pdf');
+  if (share) share.addEventListener('click', function () {
+    var url = location.href;
+    if (navigator.share) {
+      navigator.share({ title: document.title, url: url }).catch(function () {});
+      return;
+    }
+    if (navigator.clipboard) {
+      navigator.clipboard.writeText(url).then(function () {
+        share.textContent = '已复制链接';
+        setTimeout(function () { share.textContent = '复制链接'; }, 1600);
+      }).catch(function () { window.prompt('复制下面的链接：', url); });
+    } else {
+      window.prompt('复制下面的链接：', url);
+    }
+  });
+  if (pdf) pdf.addEventListener('click', function () { window.print(); });
+})();
+</script>
+{{end}}

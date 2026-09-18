@@ -1,0 +1,105 @@
+{{define "content"}}
+<div class="wrap">
+  <div class="page-head">
+    <div>
+      <h1>专题管理</h1>
+      <div class="sub">把某段时间、某个区域里的足迹打包成一个可对外展示的页面（地点 + 世界迷雾）</div>
+    </div>
+    <div class="row">
+      <a class="btn" href="/admin">← 返回后台</a>
+      <a class="btn" href="/topics" target="_blank">查看前台</a>
+    </div>
+  </div>
+
+  {{if .Flash}}<div class="alert ok">{{.Flash}}</div>{{end}}
+  {{if .Err}}<div class="alert err">{{.Err}}</div>{{end}}
+
+  <div class="card">
+    <h2>{{if .IsNew}}新建专题{{else}}编辑专题 #{{.Form.ID}}{{end}}</h2>
+    <div class="card-sub">时间范围可精确到分钟；半径为 0 表示不限区域（时间范围内的地点画到哪算哪）。
+      区域内的世界迷雾由地图按视野自动呈现，不需要单独圈选。</div>
+    <form method="post" action="/admin/topics/save">
+      {{if not .IsNew}}<input type="hidden" name="id" value="{{.Form.ID}}">{{end}}
+      <div class="row">
+        <label class="f" style="flex:2 1 240px"><span>标题<b class="req">*</b></span><input type="text" name="title" value="{{.Form.Title}}" placeholder="如：2026 大理之行"></label>
+        <label class="f" style="flex:2 1 240px"><span>副标题</span><input type="text" name="subtitle" value="{{.Form.Subtitle}}" placeholder="如：环洱海骑行四天"></label>
+      </div>
+      <label class="f"><span>说明</span><textarea name="description" rows="3" placeholder="可选：这段行程的来龙去脉">{{.Form.Description}}</textarea></label>
+      <div class="row">
+        <label class="f" style="flex:1 1 200px"><span>开始时间<b class="req">*</b></span><input type="datetime-local" name="start_at" value="{{.Form.StartDate}}"></label>
+        <label class="f" style="flex:1 1 200px"><span>结束时间<b class="req">*</b></span><input type="datetime-local" name="end_at" value="{{.Form.EndDate}}"></label>
+        <label class="f" style="flex:1 1 120px"><span>排序</span><input type="number" name="sort_order" value="{{.Form.SortOrder}}" placeholder="小的在前"></label>
+      </div>
+      <div class="card-sub" style="margin:0 0 8px">区域（可选）：填了中心点与半径就只收这个圆内的足迹；留空则不限区域</div>
+      <div class="row">
+        <label class="f" style="flex:1 1 150px"><span>中心纬度</span><input type="text" name="center_lat" value="{{if .Form.CenterLat}}{{printf "%.6f" .Form.CenterLat}}{{end}}" placeholder="25.606486"></label>
+        <label class="f" style="flex:1 1 150px"><span>中心经度</span><input type="text" name="center_lon" value="{{if .Form.CenterLon}}{{printf "%.6f" .Form.CenterLon}}{{end}}" placeholder="100.267638"></label>
+        <label class="f" style="flex:1 1 120px"><span>半径（公里）</span><input type="text" name="radius_km" value="{{if .Form.RadiusKm}}{{printf "%.1f" .Form.RadiusKm}}{{end}}" placeholder="0 或留空＝不限"></label>
+      </div>
+      <div class="row" style="align-items:center;margin-bottom:10px">
+        <label class="check" style="margin:0"><input type="checkbox" name="show_fog" {{if .Form.ShowFog}}checked{{end}}> 展示世界迷雾</label>
+        <label class="check" style="margin:0"><input type="checkbox" name="enabled" {{if .Form.Enabled}}checked{{end}}> 对外展示（取消勾选则访客看不到）</label>
+      </div>
+      <button class="btn primary" type="submit">{{if .IsNew}}创建专题{{else}}保存修改{{end}}</button>
+      {{if not .IsNew}}<a class="btn" href="/admin/topics">取消编辑</a>{{end}}
+    </form>
+  </div>
+
+  <div class="card">
+    <h2>专题列表</h2>
+    <div class="card-sub">共 {{len .Topics}} 个；「对访客」一列是展示开关，关掉的专题只有你自己能预览</div>
+    {{if .Topics}}
+    <div class="tw">
+      <table class="tb">
+        <thead><tr><th>标题</th><th>时间范围</th><th class="num">地点</th><th class="num">到访</th><th>区域</th><th>对访客</th><th></th></tr></thead>
+        <tbody>
+        {{range .Topics}}
+          <tr>
+            <td><a href="/topics/{{.ID}}" target="_blank">{{.Title}}</a>{{if .Subtitle}} <span class="muted">· {{.Subtitle}}</span>{{end}}</td>
+            <td class="muted mono">{{.RangeLabel}}</td>
+            <td class="num">{{num .PlaceCount}}</td>
+            <td class="num">{{num .VisitCount}}</td>
+            <td class="muted">{{if .HasArea}}{{printf "%.1f" .RadiusKm}} km 内{{else}}不限{{end}}</td>
+            <td>
+              <form method="post" action="/admin/topics/toggle" style="display:inline">
+                <input type="hidden" name="id" value="{{.ID}}">
+                <button class="btn sm {{if .Enabled}}primary{{end}}" type="submit">{{if .Enabled}}展示中{{else}}已隐藏{{end}}</button>
+              </form>
+            </td>
+            <td style="white-space:nowrap">
+              <a class="btn sm" href="/admin/topics?edit={{.ID}}">编辑</a>
+              <form method="post" action="/admin/topics/delete" style="display:inline"
+                    onsubmit="return confirm('删除专题「{{.Title}}」？地点数据不受影响。')">
+                <input type="hidden" name="id" value="{{.ID}}">
+                <button class="btn sm danger" type="submit">删除</button>
+              </form>
+            </td>
+          </tr>
+        {{end}}
+        </tbody>
+      </table>
+    </div>
+    {{else}}
+    <div class="empty">还没有专题，用上面的表单建一个吧</div>
+    {{end}}
+  </div>
+</div>
+
+<script>
+(function () {
+  function whenReady(cb) {
+    if (document.readyState === 'complete') { setTimeout(cb, 0); return; }
+    window.addEventListener('load', cb);
+  }
+  whenReady(function () {
+    try {
+      if (!window.flatpickr) return;
+      if (flatpickr.l10ns && flatpickr.l10ns.zh) flatpickr.localize(flatpickr.l10ns.zh);
+      document.querySelectorAll('input[type=datetime-local]').forEach(function (el) {
+        flatpickr(el, { enableTime: true, time_24hr: true, allowInput: true, minuteIncrement: 5, dateFormat: 'Y-m-dTH:i' });
+      });
+    } catch (e) { console.error('flatpickr 初始化失败', e); }
+  });
+})();
+</script>
+{{end}}

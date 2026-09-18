@@ -1,0 +1,746 @@
+{{define "content"}}
+{{/* 解析器放最前：它必须在用户选完文件之前就绪，放页面底部会晚一步 */}}
+<script src="/static/js/photo-exif.js?v={{.AssetV}}"></script>
+<script src="/static/js/place-image.js?v={{.AssetV}}"></script>
+{{/* 选项数据放隐藏 select 里给脚本读：内联 JSON 会被模板的 JS 上下文转义搞坏 */}}
+<select id="category-options" hidden>
+  <option value="">未指定</option>
+  {{range .Categories}}<option value="{{.Label}}">{{.Name}}</option>{{end}}
+  <option value="__custom__">自定义…</option>
+</select>
+<select id="activity-options" hidden>
+  <option value="">未指定</option>
+  {{range .Activities}}<option value="{{.ID}}">{{.Name}}</option>{{end}}
+</select>
+<select id="tag-options" hidden>
+  {{range .Tags}}<option value="{{.ID}}">{{.Name}}</option>{{end}}
+</select>
+
+<div class="wrap">
+  <div class="page-head">
+    <div>
+      <h1>照片导入</h1>
+      <div class="sub">从照片的 EXIF 读拍摄时间与坐标，反查地址后逐条确认，再写入数据库</div>
+    </div>
+    <div class="row"><a class="btn" href="/admin">← 返回后台</a></div>
+  </div>
+
+  {{if .Flash}}<div class="alert ok">{{.Flash}}</div>{{end}}
+  {{if .Err}}<div class="alert err">{{.Err}}</div>{{end}}
+
+  <div class="card">
+    <h2>1. 选照片与坐标系</h2>
+    <div class="card-sub">
+      支持 JPEG 与 HEIC/HEIF。<b>EXIF 在浏览器里读取，照片不会上传到服务器</b>——
+      一次几十张、几百 MB 都没有上传耗时或存储压力。
+    </div>
+    <div class="row" style="align-items:center;margin-bottom:10px">
+      <span class="muted" style="font-size:12.5px">照片里的坐标是</span>
+      <label class="check" style="margin:0"><input type="radio" name="coord-sel" value="wgs84" checked> WGS-84（绝大多数手机）</label>
+      <label class="check" style="margin:0"><input type="radio" name="coord-sel" value="gcj02"> 已经是 GCJ-02（部分国产手机会这样写）</label>
+    </div>
+    {{if not .GeocodeReady}}
+    <div class="alert err" style="margin-bottom:10px">未配置高德 <span class="mono">geocode_key</span>，无法反查地址，只能靠坐标判断。</div>
+    {{end}}
+    <div class="row" style="align-items:center;gap:10px">
+      <label class="btn primary" for="photo-input" style="cursor:pointer">＋ 选择照片</label>
+      <input type="file" id="photo-input" accept="image/*" multiple hidden>
+      <span class="muted" id="pick-count" style="font-size:12.5px">可多选，JPEG / HEIC 都行</span>
+    </div>
+    <div id="parse-status" class="alert info"></div>
+  </div>
+
+  <form method="post" action="/admin/photos/import" id="import-form" enctype="multipart/form-data">
+    <input type="hidden" name="n" id="row-count" value="0">
+    <input type="hidden" name="coord" id="coord-field" value="wgs84">
+    <div class="card" id="preview-card" style="display:none">
+      <h2>2. 确认与修改</h2>
+      <div class="card-sub">对照「地址」列确认点是否正确；点该行的「更多」可以改类别、省市区街道、活动、标签等——字段与<a href="/admin/edit">新增地点</a>完全一致。</div>
+      <div id="map-card" style="display:none">
+        <div id="photo-map" class="photo-map"></div>
+        <div class="card-sub" style="margin:6px 2px 0">地图上是所有已读取的点（坐标已按上面的选择换算）；点跑到国外或海里说明坐标系选错了。<b>鼠标移到下面任意一行，地图上对应的点会跳出来</b>，点「地图」可以看单点大图。</div>
+      </div>
+      <div class="kpis" style="margin:12px 0 14px">
+        <div class="kpi"><div class="v" id="k-total">0</div><div class="k">读取到的照片</div></div>
+        <div class="kpi"><div class="v" id="k-gps">0</div><div class="k">含坐标</div></div>
+        <div class="kpi"><div class="v" id="k-addr">0</div><div class="k">地址反查成功</div></div>
+        <div class="kpi"><div class="v" id="k-todo">0</div><div class="k">待补坐标 / 时间</div></div>
+      </div>
+      {{/* 固定列宽比例：输入框跟着列宽走，表格就不会被撑宽到需要横向拖动 */}}
+      <div class="tw">
+        <table class="tb photo-table">
+          <colgroup>
+            <col style="width:4%"><col style="width:7%"><col style="width:10%"><col style="width:11%">
+            <col style="width:11%"><col style="width:19%"><col style="width:12%"><col style="width:12%">
+            <col style="width:14%">
+          </colgroup>
+          <thead>
+            <tr>
+              <th>导入</th><th>存图</th><th>文件</th><th>地点名</th><th>坐标</th><th>地址（反查）</th>
+              <th>到达时间</th><th>离开时间</th><th>说明</th>
+            </tr>
+          </thead>
+          <tbody id="rows"></tbody>
+        </table>
+      </div>
+      <div class="row" style="margin-top:12px;gap:10px">
+        <button class="btn primary" type="submit">写入数据库</button>
+        <button class="btn" type="button" id="retry-btn">重新反查未成功的</button>
+        <button class="btn" type="button" id="reset-btn">重新选照片</button>
+      </div>
+      <div class="req-tip" style="margin-top:8px">导入后每张照片会生成一个地点 + 一条到访（标记为「补录」），可在<a href="/admin/edit">数据编辑</a>里继续调整或删除。</div>
+    </div>
+  </form>
+</div>
+
+{{/* 单个点位的地图：总图留着看分布，这一个用来看「这个点到底在哪」 */}}
+<div id="point-modal" style="display:none">
+  <div class="point-modal-box">
+    <div class="point-modal-head">
+      <b id="point-modal-title">点位</b>
+      <button class="btn sm" type="button" id="point-modal-close">关闭</button>
+    </div>
+    <div id="point-modal-map" class="point-modal-map"></div>
+    <div id="point-modal-meta" class="card-sub" style="margin:8px 2px 0"></div>
+  </div>
+</div>
+
+<script>
+(function () {
+  var DEFAULT_STAY_MIN = 10;
+  var input = document.getElementById('photo-input');
+  var rowsBox = document.getElementById('rows');
+  var previewCard = document.getElementById('preview-card');
+  var mapCard = document.getElementById('map-card');
+  var status = document.getElementById('parse-status');
+  var rowCount = document.getElementById('row-count');
+  var coordField = document.getElementById('coord-field');
+  if (!input || !window.rondExif) return;
+
+  function coordSel() {
+    var el = document.querySelector('input[name=coord-sel]:checked');
+    return el ? el.value : 'wgs84';
+  }
+  function pad(n) { return (n < 10 ? '0' : '') + n; }
+  // datetime-local 需要的本地时间串（EXIF 没有时区，按拍摄地当地时间理解）
+  function dtLocal(d) {
+    return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()) +
+      'T' + pad(d.getHours()) + ':' + pad(d.getMinutes());
+  }
+  function tInput(name, value, placeholder, width) {
+    var el = document.createElement('input');
+    el.type = 'text';
+    el.name = name;
+    el.value = value || '';
+    el.placeholder = placeholder || '';
+    // 宽度交给列宽（photo-table 是 fixed 布局，input 撑满格子即可）
+    el.style.width = '100%';
+    el.style.minWidth = '0';
+    return el;
+  }
+  function dtInput(name, value) {
+    var el = document.createElement('input');
+    el.type = 'datetime-local';
+    el.name = name;
+    el.value = value || '';
+    el.style.width = '100%';
+    el.style.minWidth = '0';
+    return el;
+  }
+  function fieldLabel(text, control, flex) {
+    var lab = document.createElement('label');
+    lab.className = 'f';
+    lab.style.cssText = flex + ';margin-bottom:0';
+    var sp = document.createElement('span');
+    sp.textContent = text;
+    lab.appendChild(sp);
+    lab.appendChild(control);
+    return lab;
+  }
+  // 更多里的分组小标题：一堆输入框挤在一起像锅粥，每组给一句说明
+  function groupCap(text) {
+    var d = document.createElement('div');
+    d.className = 'card-sub';
+    d.style.cssText = 'margin:0 0 4px';
+    d.textContent = text;
+    return d;
+  }
+  // 鼠标划到某一行时把图上那个点挑出来（index 为 null 表示复原）。
+  // 记一下当前高亮的是谁：鼠标在「主行 ↔ 更多块」之间移动会连发几次事件，
+  // 行号没变就不必让地图重设一遍样式（会闪）。
+  var hoveredRow = null;
+  function highlightRow(i) {
+    if (hoveredRow === i) return;
+    hoveredRow = i;
+    if (!window.rondMap) return;
+    window.rondMap.highlight('photo-map', i === null ? null : 'row-' + i);
+  }
+  // 主行和它的「更多」块是两条独立的 <tr>，各自绑 mouseleave 的话，
+  // 鼠标一进「更多」块就会被主行的 leave 把高亮清掉——而改字段往往就在那块里。
+  // 所以两行打上同一个行号，统一按「光标底下那一行是谁」来算。
+  rowsBox.addEventListener('mouseover', function (e) {
+    var tr = e.target && e.target.closest ? e.target.closest('tr') : null;
+    highlightRow(tr && tr.dataset.rowIndex !== undefined ? Number(tr.dataset.rowIndex) : null);
+  });
+  rowsBox.addEventListener('mouseleave', function () { highlightRow(null); });
+  // 按隐藏 select 的选项克隆一个独立的下拉（每行一份，互不影响）
+  function makeSelect(name, srcId) {
+    var src = document.getElementById(srcId);
+    var sel = document.createElement('select');
+    sel.name = name;
+    if (src) {
+      [].forEach.call(src.options, function (o) {
+        var opt = document.createElement('option');
+        opt.value = o.value;
+        opt.textContent = o.textContent;
+        sel.appendChild(opt);
+      });
+    }
+    return sel;
+  }
+  function setVal(name, v) {
+    var el = rowsBox.querySelector('input[name="' + name + '"], select[name="' + name + '"]');
+    if (el && v) el.value = v;
+  }
+  function valOf(idx, field) {
+    var el = rowsBox.querySelector('[name="' + field + '_' + idx + '"]');
+    return el ? el.value : '';
+  }
+
+  // 一行 = 主行（常用字段）+ 默认收起的「更多」行（字段与新增地点一致）
+  function addRow(index, file, info, errMsg) {
+    var tr = document.createElement('tr');
+
+    var td = document.createElement('td');
+    var keep = document.createElement('input');
+    keep.type = 'checkbox';
+    keep.name = 'keep_' + index;
+    keep.checked = !!(info && info.hasGPS); // 没读到坐标的默认不导入
+    td.appendChild(keep);
+    tr.appendChild(td);
+
+    // 存图：勾上就把这张照片在浏览器里转成 WebP 一起提交，作为该地点的配图。
+    // 默认不勾——一次导入几十张全存会占不少空间，也可能把相册里的截图一起带进去。
+    td = document.createElement('td');
+    var keepImg = document.createElement('input');
+    keepImg.type = 'checkbox';
+    keepImg.name = 'keepimg_' + index;
+    keepImg.title = '把这张照片在浏览器里转成 WebP（长边 1440px、约 100~250KB）存为该地点的图片，地点页可查看、可删';
+    td.appendChild(keepImg);
+    tr.appendChild(td);
+
+    td = document.createElement('td');
+    td.className = 'muted';
+    td.style.cssText = 'max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap';
+    td.textContent = file.name;
+    td.title = file.name;
+    tr.appendChild(td);
+
+    td = document.createElement('td');
+    var initialName = file.name.replace(/\.[^.]+$/, '');
+    var nameInput = tInput('name_' + index, initialName, '地点名', '120px');
+    nameInput.dataset.initial = initialName;
+    td.appendChild(nameInput);
+    tr.appendChild(td);
+
+    td = document.createElement('td');
+    var latEl = tInput('lat_' + index, info && info.hasGPS ? info.lat.toFixed(6) : '', '纬度', '98px');
+    var lonEl = tInput('lon_' + index, info && info.hasGPS ? info.lon.toFixed(6) : '', '经度', '98px');
+    latEl.style.marginBottom = '4px';
+    td.appendChild(latEl);
+    td.appendChild(lonEl);
+    tr.appendChild(td);
+
+    td = document.createElement('td');
+    td.className = 'muted';
+    td.style.cssText = 'max-width:260px';
+    var addrEl = document.createElement('div');
+    addrEl.textContent = '—';
+    td.appendChild(addrEl);
+    tr.appendChild(td);
+
+    var arrival = '', departure = '';
+    if (info && info.hasTime && info.shot) {
+      arrival = dtLocal(info.shot);
+      departure = dtLocal(new Date(info.shot.getTime() + DEFAULT_STAY_MIN * 60000));
+    }
+    td = document.createElement('td');
+    td.appendChild(dtInput('arrival_' + index, arrival));
+    tr.appendChild(td);
+
+    td = document.createElement('td');
+    td.appendChild(dtInput('departure_' + index, departure));
+    tr.appendChild(td);
+
+    var notes = [];
+    if (errMsg) notes.push(errMsg);
+    if (info && info.hasGPS && !info.hasTime) notes.push('没有拍摄时间，请手工填写');
+    if (info && !info.hasGPS && info.hasTime) notes.push('没有 GPS 坐标，请手工填写');
+    td = document.createElement('td');
+    td.className = 'muted';
+    td.style.maxWidth = '220px';
+    var noteEl = document.createElement('div');
+    noteEl.textContent = notes.join('；');
+    td.appendChild(noteEl);
+    // 操作链接单独一行且整体不折行——中文默认能在任意字间断开，
+    // 「地图」会被拆成「地」「图」两行
+    var acts = document.createElement('div');
+    acts.style.cssText = 'display:flex;gap:6px;flex-wrap:wrap;margin-top:6px';
+    var mapLink = document.createElement('a');
+    mapLink.href = 'javascript:void(0)';
+    mapLink.textContent = '地图';
+    mapLink.className = 'btn sm';
+    mapLink.addEventListener('click', function () {
+      var lat = parseFloat(valOf(index, 'lat')), lon = parseFloat(valOf(index, 'lon'));
+      if (isNaN(lat) || isNaN(lon) || (!lat && !lon)) { window.alert('这一行还没有坐标'); return; }
+      openPointMap(lat, lon, valOf(index, 'name'), addrEl.textContent);
+    });
+    acts.appendChild(mapLink);
+    var moreLink = document.createElement('a');
+    moreLink.href = 'javascript:void(0)';
+    moreLink.textContent = '更多';
+    moreLink.className = 'btn sm';
+    acts.appendChild(moreLink);
+    td.appendChild(acts);
+    tr.appendChild(td);
+    rowsBox.appendChild(tr);
+
+    // ---- 更多：地点属性（与新增地点一致）----
+    var tr2 = document.createElement('tr');
+    tr2.style.display = 'none';
+    var td2 = document.createElement('td');
+    // 主行是 9 列（colSpan 少一列的话，这块灰底就比上面窄一格，看着很突兀）
+    td2.colSpan = 9;
+    td2.style.cssText = 'background:var(--bg-2);padding:12px 14px'
+
+    var row1 = document.createElement('div');
+    row1.className = 'row';
+    var catSel = makeSelect('category_' + index, 'category-options');
+    var catCustom = tInput('category_custom_' + index, '', '如 公园', '140px');
+    var catCustomWrap = fieldLabel('自定义类别', catCustom, 'flex:0 1 150px');
+    catCustomWrap.style.display = 'none';
+    catSel.addEventListener('change', function () {
+      catCustomWrap.style.display = catSel.value === '__custom__' ? '' : 'none';
+    });
+    td2.appendChild(groupCap('地点属性'));
+    row1.appendChild(fieldLabel('类别', catSel, 'flex:0 1 160px'));
+    row1.appendChild(catCustomWrap);
+    [
+      ['country_' + index, '国家代码', 'CN', '90px'],
+      ['province_' + index, '省份', '', '100px'],
+      ['city_' + index, '城市', '', '100px'],
+      ['district_' + index, '区县', '', '100px'],
+      ['street_' + index, '街道', '', '140px'],
+      ['timezone_' + index, '时区', 'Asia/Shanghai', '130px']
+    ].forEach(function (spec) {
+      row1.appendChild(fieldLabel(spec[1], tInput(spec[0], spec[2], '', spec[3]), 'flex:0 1 ' + spec[3]));
+    });
+    td2.appendChild(row1);
+
+    // ---- 更多：到访属性（与新增到访一致）----
+    var row2 = document.createElement('div');
+    row2.className = 'row';
+    var cap2 = groupCap('到访属性');
+    cap2.style.marginTop = '14px';
+    td2.appendChild(cap2);
+    row2.appendChild(fieldLabel('活动', makeSelect('activity_' + index, 'activity-options'), 'flex:0 1 170px'));
+    // 备注不设 flex-grow：让它自己那么宽就行，否则会被拉伸到最右，把「标记为收藏」挤出视野
+    row2.appendChild(fieldLabel('备注', tInput('remark_' + index, '', '可选', '200px'), 'flex:0 1 260px'));
+    var favWrap = document.createElement('label');
+    favWrap.className = 'check';
+    favWrap.style.cssText = 'margin:0;flex:0 0 auto;align-self:flex-end;padding-bottom:9px';
+    var fav = document.createElement('input');
+    fav.type = 'checkbox';
+    fav.name = 'bookmarked_' + index;
+    favWrap.appendChild(fav);
+    favWrap.appendChild(document.createTextNode(' 标记为收藏'));
+    row2.appendChild(favWrap);
+    td2.appendChild(row2);
+
+    // ---- 更多：标签（多选 chips）----
+    var tagSrc = document.getElementById('tag-options');
+    if (tagSrc && tagSrc.options.length) {
+      var cap3 = groupCap('标签');
+      cap3.style.marginTop = '14px';
+      td2.appendChild(cap3);
+      var row3 = document.createElement('div');
+      row3.className = 'chips';
+      [].forEach.call(tagSrc.options, function (o) {
+        var chip = document.createElement('label');
+        chip.className = 'chip';
+        chip.style.cursor = 'pointer';
+        var cb = document.createElement('input');
+        cb.type = 'checkbox';
+        cb.name = 'tags_' + index;
+        cb.value = o.value;
+        cb.style.marginRight = '5px';
+        chip.appendChild(cb);
+        chip.appendChild(document.createTextNode(o.textContent));
+        row3.appendChild(chip);
+      });
+      td2.appendChild(row3);
+    }
+
+    tr2.appendChild(td2);
+    rowsBox.appendChild(tr2);
+
+    moreLink.addEventListener('click', function () {
+      var show = tr2.style.display === 'none';
+      tr2.style.display = show ? '' : 'none';
+      moreLink.textContent = show ? '收起' : '更多';
+    });
+    // 行号打在两行 <tr> 上（主行 + 「更多」行），rowsBox 的 mouseover 靠它找回来
+    tr.dataset.rowIndex = index;
+    tr2.dataset.rowIndex = index;
+    return { addrEl: addrEl, file: file, keepImg: keepImg };
+  }
+
+  function initPickers() {
+    try {
+      if (!window.flatpickr) return;
+      if (flatpickr.l10ns && flatpickr.l10ns.zh) flatpickr.localize(flatpickr.l10ns.zh);
+      rowsBox.querySelectorAll('input[type=datetime-local]').forEach(function (el) {
+        if (el._flatpickr) return;
+        flatpickr(el, { enableTime: true, time_24hr: true, allowInput: true, minuteIncrement: 5, dateFormat: 'Y-m-dTH:i' });
+      });
+    } catch (e) { console.error('flatpickr 初始化失败', e); }
+  }
+
+  // 反查地址：坐标交给服务端（坐标系换算也在那边做），拿回地址与换算后的坐标
+  function lookup(coords) {
+    return fetch('/api/regeo', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ coord: coordSel(), points: coords })
+    }).then(function (r) { return r.json(); }).then(function (d) {
+      if (d.error) throw new Error(d.error);
+      return d.items || [];
+    });
+  }
+
+  // 世代号：连续选两次文件时，旧那一轮的解析结果一律丢弃，避免表格出现重复行
+  var gen = 0;
+  // rowRefs 提到外层：applyOne 与「重新反查」按钮都要按行号找回那一行的地址元素
+  var rowRefs = {};
+  input.addEventListener('change', function () {
+    var files = [].slice.call(input.files || []);
+    if (!files.length) return;
+    var my = ++gen;
+    rowsBox.innerHTML = '';
+    rowCount.value = '0';
+    previewCard.style.display = '';
+    mapCard.style.display = 'none';
+    status.textContent = '正在读取 ' + files.length + ' 张照片的 EXIF…';
+    var pickCount = document.getElementById('pick-count');
+    if (pickCount) pickCount.textContent = '已选 ' + files.length + ' 张';
+
+    rowRefs = {};
+    var done = 0, withGPS = 0;
+    var chain = Promise.resolve();
+    files.forEach(function (file, i) {
+      chain = chain.then(function () {
+        if (my !== gen) return;
+        return window.rondExif.read(file).then(function (info) {
+          if (my !== gen) return;
+          rowRefs[i] = addRow(i, file, info, null);
+          if (info.hasGPS) withGPS++;
+        }).catch(function (err) {
+          if (my !== gen) return;
+          rowRefs[i] = addRow(i, file, null, (err && err.message) || '读取失败');
+        }).then(function () {
+          if (my !== gen) return;
+          done++;
+          status.textContent = '正在读取 ' + done + '/' + files.length + '…';
+          initPickers();
+        });
+      });
+    });
+
+    chain.then(function () {
+      if (my !== gen) return;
+      rowCount.value = String(files.length);
+      // EXIF 一读完就把数字亮出来（此时还没反查，地址数为 0）；后面每条路径都会再刷
+      updateKpis();
+      if (!withGPS) {
+        status.textContent = '已读取 ' + files.length + ' 张，但都没有可用的 GPS 坐标。';
+        return;
+      }
+      status.textContent = '已读取 ' + files.length + ' 张（' + withGPS + ' 张含坐标），正在反查地址…';
+
+      // 收集坐标：key 用行号，服务端去重后仍能配回每一行
+      var coords = [], owner = [];
+      files.forEach(function (file, i) {
+        var lat = parseFloat(valOf(i, 'lat')), lon = parseFloat(valOf(i, 'lon'));
+        if (isNaN(lat) || isNaN(lon) || (!lat && !lon)) return;
+        coords.push({ lat: lat, lon: lon, key: String(i) });
+        owner.push(i);
+      });
+      if (!coords.length) {
+        status.textContent = '已读取 ' + files.length + ' 张，没有可反查的坐标。';
+        return;
+      }
+      lookup(coords).then(function (items) {
+        if (my !== gen) return;
+        var byKey = {};
+        items.forEach(function (it) { byKey[it.key] = it; });
+        var hit = 0;
+        owner.forEach(function (i) {
+          var it = byKey[String(i)];
+          if (!it || !it.address) return;
+          hit++;
+          applyOne(i, it);
+        });
+        finishLookup(files.length, withGPS, hit, owner.length);
+      }).catch(function (err) {
+        if (my !== gen) return;
+        status.textContent = '已读取 ' + files.length + ' 张（' + withGPS + ' 张含坐标），但地址反查失败：' +
+          (err.message || err) + '。可以点「重新反查未成功的」再试，或只看坐标判断。';
+        drawMap();
+      });
+    });
+  });
+
+  // applyOne 把一条反查结果写回它的行：地址、店名、坐标、省市区街道、地点名
+  function applyOne(i, it) {
+    if (rowRefs[i]) {
+      // 有店名时显示成「店名 · 完整地址」，比干巴巴的街道好认
+      var text = it.address || '';
+      if (it.poi) {
+        text = it.poi + (it.poiDist ? '（' + Math.round(it.poiDist) + 'm）' : '') + ' · ' + text;
+      }
+      rowRefs[i].addrEl.textContent = text;
+      rowRefs[i].addrEl.title = text;
+    }
+    // 服务端返回的是换算后的 GCJ-02 坐标，写回表格保证导入的就是它
+    if (it.lat && it.lon) {
+      var latEl = rowsBox.querySelector('input[name=lat_' + i + ']');
+      var lonEl = rowsBox.querySelector('input[name=lon_' + i + ']');
+      if (latEl) latEl.value = it.lat.toFixed(6);
+      if (lonEl) lonEl.value = it.lon.toFixed(6);
+    }
+    setVal('province_' + i, it.province);
+    setVal('city_' + i, it.city);
+    setVal('district_' + i, it.district);
+    setVal('street_' + i, it.street);
+    if (it.country) setVal('country_' + i, it.country);
+    var nameEl = rowsBox.querySelector('input[name=name_' + i + ']');
+    if (nameEl && nameEl.value === nameEl.dataset.initial) {
+      // 名称还停在文件名（用户没改过）时优先用店名，其次「区县 + 街道/乡镇」
+      var better = it.poi || [it.district, it.street || it.township].filter(Boolean).join('');
+      if (better) nameEl.value = better;
+    }
+  }
+
+  // 四个数字比一行长句子好扫。待补=没有坐标或没有到达时间的行（这两项不补就导不进去）
+  function kpi(id, v) { var el = document.getElementById(id); if (el) el.textContent = String(v); }
+  // 全部从 DOM 现算，不靠调用方传参：谁改了表格谁就调一次 updateKpis() 即可。
+  // 之前是「哪些路径记得传参才更新」，漏了「全都没 GPS」「没有可反查的坐标」「重新反查」
+  // 这几条，数字会停在上一批的值上——比显示 0 更容易误导。
+  function updateKpis() {
+    var total = 0, gps = 0, addr = 0, todo = 0;
+    Object.keys(rowRefs).forEach(function (k) {
+      var i = Number(k);
+      total++;
+      var lat = parseFloat(valOf(i, 'lat')), lon = parseFloat(valOf(i, 'lon'));
+      var hasPoint = !isNaN(lat) && !isNaN(lon) && !!(lat || lon);
+      if (hasPoint) gps++;
+      // 地址列还停在占位符 = 这一行没反查成功（与「重新反查」挑行的判据同源）
+      var ref = rowRefs[i];
+      if (ref && ref.addrEl && ref.addrEl.textContent !== '—') addr++;
+      if (!hasPoint || !valOf(i, 'arrival')) todo++;
+    });
+    kpi('k-total', total); kpi('k-gps', gps); kpi('k-addr', addr); kpi('k-todo', todo);
+  }
+  // 手工改过坐标/时间之后数字要跟着变，不然一直挂在旧值上
+  rowsBox.addEventListener('change', updateKpis);
+
+  function finishLookup(total, withGPS, hit, asked) {
+    status.textContent = '已读取 ' + total + ' 张（' + withGPS + ' 张含坐标），' +
+      hit + '/' + asked + ' 个点位反查成功' +
+      (hit < asked ? '，可点「重新反查未成功的」再试' : '') + '。确认无误后点下面的按钮写入数据库。';
+    drawMap();
+  }
+
+  // ---- 单个点位的地图弹窗：只建一个 Leaflet 实例，之后靠 setPoints/setView 复用 ----
+  var modal = document.getElementById('point-modal');
+  var modalInited = false;
+  function openPointMap(lat, lon, name, addr) {
+    document.getElementById('point-modal-title').textContent = name || '点位';
+    document.getElementById('point-modal-meta').textContent =
+      (addr && addr !== '—' ? addr + ' · ' : '') + lat.toFixed(6) + ', ' + lon.toFixed(6);
+    modal.style.display = 'flex';
+    var pts = [{ lat: lat, lon: lon, n: name || '', v: 1 }];
+    if (!modalInited) {
+      if (!window.rondMap) { document.getElementById('point-modal-meta').textContent += '（地图脚本未就绪）'; return; }
+      window.rondMap.preview({ id: 'point-modal-map', points: pts });
+      modalInited = true;
+      // 单个点 fitBounds 会顶到最大缩放，等底图就绪后固定到街区级
+      var pin = function () {
+        var st = window.rondMap._state['point-modal-map'];
+        if (st && st.map) { st.map.invalidateSize(); st.map.setView([lat, lon], 16); }
+      };
+      setTimeout(pin, 400);
+      setTimeout(pin, 1200);
+    } else {
+      var st = window.rondMap._state['point-modal-map'];
+      if (st && st.setPoints) st.setPoints(pts);
+      if (st && st.map) { st.map.invalidateSize(); st.map.setView([lat, lon], 16); }
+    }
+  }
+  function closePointMap() { modal.style.display = 'none'; }
+  document.getElementById('point-modal-close').addEventListener('click', closePointMap);
+  modal.addEventListener('click', function (e) { if (e.target === modal) closePointMap(); });
+  document.addEventListener('keydown', function (e) { if (e.key === 'Escape') closePointMap(); });
+
+  function drawMap() {
+    // 放最前面：这是「表格改完了」的统一出口，KPI 在这里收口就不会再漏路径
+    updateKpis();
+    if (!window.rondMap) return;
+    var points = [];
+    [].forEach.call(rowsBox.querySelectorAll('input[name^=lat_]'), function (el) {
+      var i = el.name.replace('lat_', '');
+      var nameEl = rowsBox.querySelector('input[name=name_' + i + ']');
+      var lat = parseFloat(el.value), lon = parseFloat(valOf(i, 'lon'));
+      if (!lat || !lon || isNaN(lat) || isNaN(lon)) return;
+      points.push({ lat: lat, lon: lon, n: nameEl ? nameEl.value : '', v: 1, key: 'row-' + i });
+    });
+    if (!points.length) { mapCard.style.display = 'none'; return; }
+    mapCard.style.display = '';
+    window.rondMap.preview({ id: 'photo-map', points: points });
+    syncStuck();
+  }
+
+  // 图粘住时收矮（.stuck）：不收的话 200px 的浮层会挡住从下面滚过去的半个表格。
+  // 容器高度变了必须告诉 Leaflet 重新量一次，否则底图会缺一块。
+  // 导航高度只在窗口尺寸变化时才会变，所以在滚动路径上不能每帧去解析 --nav-h
+  // （读自定义属性会触发一次样式计算）；滚动里只留必须实时的 getBoundingClientRect。
+  var stuckOffset = 0;
+  function measureNav() {
+    stuckOffset = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--nav-h') || '54') + 8;
+  }
+  function syncStuck() {
+    var stuck = mapCard.getBoundingClientRect().top <= stuckOffset + 2;
+    if (stuck === mapCard.classList.contains('stuck')) return;
+    mapCard.classList.toggle('stuck', stuck);
+    var st = window.rondMap && window.rondMap._state['photo-map'];
+    if (st && st.map) setTimeout(function () { st.map.invalidateSize(); }, 260);
+  }
+  measureNav();
+  window.addEventListener('scroll', syncStuck, { passive: true });
+  window.addEventListener('resize', function () { measureNav(); syncStuck(); });
+
+  document.getElementById('retry-btn').addEventListener('click', function () {
+    var todo = [];
+    Object.keys(rowRefs).forEach(function (k) {
+      var ref = rowRefs[k];
+      // 地址列还是占位符说明这行没查到（或查失败）
+      if (!ref || !ref.addrEl || ref.addrEl.textContent !== '—') return;
+      var lat = parseFloat(valOf(k, 'lat')), lon = parseFloat(valOf(k, 'lon'));
+      if (isNaN(lat) || isNaN(lon) || (!lat && !lon)) return;
+      todo.push({ lat: lat, lon: lon, key: String(k) });
+    });
+    if (!todo.length) { status.textContent = '没有需要重新反查的行。'; return; }
+    status.textContent = '正在重新反查 ' + todo.length + ' 个点位…';
+    lookup(todo).then(function (items) {
+      var byKey = {};
+      items.forEach(function (it) { byKey[it.key] = it; });
+      var hit = 0;
+      todo.forEach(function (c) {
+        var it = byKey[c.key];
+        if (!it || !it.address) return;
+        hit++;
+        applyOne(Number(c.key), it);
+      });
+      status.textContent = '重新反查完成：' + hit + '/' + todo.length + ' 个成功' +
+        (hit < todo.length ? '（其余的周边可能确实没有收录，或坐标不在境内）' : '') + '。';
+      drawMap();
+    }).catch(function (err) {
+      status.textContent = '重新反查失败：' + ((err && err.message) || err);
+    });
+  });
+  document.getElementById('reset-btn').addEventListener('click', function () {
+    gen++;
+    input.value = '';
+    rowsBox.innerHTML = '';
+    rowCount.value = '0';
+    previewCard.style.display = 'none';
+    mapCard.style.display = 'none';
+    status.textContent = '';
+    var pickCount = document.getElementById('pick-count');
+    if (pickCount) pickCount.textContent = '可多选，JPEG / HEIC 都行';
+    window.scrollTo(0, 0);
+  });
+
+  [].forEach.call(document.querySelectorAll('input[name=coord-sel]'), function (el) {
+    el.addEventListener('change', function () { coordField.value = coordSel(); });
+  });
+
+  /* ---------- 提交前把勾了「存图」的照片转成 WebP ----------
+   * 转码是异步的，所以先拦下这次提交，转完再 form.submit() 放行；
+   * form.submit() 不触发 submit 事件，不会自己套自己。
+   * 转好的字节塞进隐藏的 <input type=file>，随表单一起以 multipart 发出去。
+   */
+  var form = document.getElementById('import-form');
+  var submitBtn = form.querySelector('button[type=submit]');
+  form.addEventListener('submit', function (e) {
+    if (form.dataset.ready === '1') return; // 放行那一趟
+    var picked = [];
+    rowsBox.querySelectorAll('input[name^=keepimg_]').forEach(function (cb) {
+      if (!cb.checked) return;
+      var i = Number(cb.name.slice('keepimg_'.length));
+      var ref = rowRefs[i];
+      if (ref && ref.file) picked.push({ i: i, file: ref.file, cb: cb });
+    });
+    if (!picked.length) { form.dataset.ready = '1'; return; }
+    // 服务端对整包有 60MB 上限：按转码后的体积（约 100~250KB）估，这里保守按 200 张提醒一次
+    if (picked.length > 200 && !window.confirm('这次勾了 ' + picked.length + ' 张要存为图片，' +
+        '总量可能超过服务端 60MB 的上限导致整包提交失败。建议分两次导入，是否继续？')) {
+      if (submitBtn) submitBtn.disabled = false;
+      return;
+    }
+    e.preventDefault();
+    if (submitBtn) submitBtn.disabled = true;
+    var at = 0, failed = 0;
+    function next() {
+      if (at >= picked.length) {
+        if (failed) {
+          // 有转码失败的：提示后仍然继续导入地点，只是那几张不带图
+          status.textContent = '已跳过 ' + failed + ' 张转码失败的图片，正在写入数据库…';
+        } else {
+          status.textContent = '图片已就绪，正在写入数据库…';
+        }
+        form.dataset.ready = '1';
+        form.submit();
+        return;
+      }
+      var it = picked[at++];
+      status.textContent = '正在转码图片 ' + at + '/' + picked.length + '…';
+      window.rondImage.toWebP(it.file).then(function (out) {
+        var holder = document.createElement('input');
+        holder.type = 'file';
+        holder.name = 'image_' + it.i;
+        holder.style.display = 'none';
+        var dt = new DataTransfer();
+        dt.items.add(new File([out.blob], 'image.webp', { type: 'image/webp' }));
+        holder.files = dt.files;
+        form.appendChild(holder);
+        // 宽高随文件一起发：服务端不解码图片，只记账
+        [['image_w_', out.width], ['image_h_', out.height]].forEach(function (pair) {
+          var h = document.createElement('input');
+          h.type = 'hidden';
+          h.name = pair[0] + it.i;
+          h.value = pair[1];
+          form.appendChild(h);
+        });
+      }).catch(function (err) {
+        failed++;
+        it.cb.checked = false;
+        status.textContent = '第 ' + (it.i + 1) + ' 行的图片转码失败（已跳过）：' +
+          ((err && err.message) || err);
+      }).then(next);
+    }
+    next();
+  });
+})();
+</script>
+{{end}}

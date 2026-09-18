@@ -1,0 +1,454 @@
+{{define "content"}}
+<div class="wrap">
+  <div class="page-head">
+    <div>
+      <h1>{{if .Place.Name}}{{.Place.Name}}{{else}}未命名地点{{end}}</h1>
+      <div class="sub">
+        {{if .Place.City}}{{.Place.City}}{{end}}
+        {{if .Place.Province}} · {{.Place.Province}}{{end}}
+        {{if .Place.District}} · {{.Place.District}}{{end}}
+        {{if .Place.POICategory}} · {{poiname .Place.POICategory}}{{end}}
+        · <span class="mono">{{f1 .Place.Lat}}, {{f1 .Place.Lon}}</span>
+      </div>
+    </div>
+    <div class="row">
+      <a class="btn" href="/places">← 返回地点库</a>
+      <a class="btn" href="/map?q={{.Place.Name}}">在地图中查看</a>
+      {{if .IsAdmin}}<a class="btn" href="/admin/edit?open={{.Place.SrcPK}}" title="在数据编辑页里直接打开这个地点的编辑框">编辑</a>{{end}}
+      {{if .Images}}<button class="btn" type="button" id="imgs-open">图片 <span class="muted">{{len .Images}}</span></button>{{end}}
+    </div>
+  </div>
+
+  <div class="kpis" style="margin-bottom:16px">
+    <div class="kpi"><div class="v">{{num .Place.VisitCount}}<small>次</small></div><div class="k">到访次数</div></div>
+    <div class="kpi"><div class="v">{{dur .Place.DwellMinutes}}</div><div class="k">累计停留</div></div>
+    <div class="kpi"><div class="v">{{if .Place.FirstAt}}{{d .Place.FirstAt}}{{else}}—{{end}}</div><div class="k">首次到访</div></div>
+    <div class="kpi"><div class="v">{{if .Place.LastAt}}{{since .Place.LastAt}}{{else}}—{{end}}</div><div class="k">最近到访</div></div>
+  </div>
+
+  {{if .IsAdmin}}
+  <div class="card" style="margin-bottom:16px">
+    <h2>备注与别名</h2>
+    <div class="card-sub">
+      别名会替代原名显示在所有页面上；备注{{if .Settings.NotesPublic}}对访客公开{{else}}只有你自己能看到{{end}}。
+      「推荐 / 踩雷」是单独的按钮，不用写进备注。按 rond 的地点 ID 保存，重新上传备份也不会丢。
+    </div>
+    {{if .Flash}}<div class="alert ok" id="note-flash">{{.Flash}}</div>{{end}}
+    {{if .RondNote}}
+    <div class="card-sub" style="margin-bottom:10px">
+      <div style="margin-bottom:4px">
+        rond 备份里给这个地点写过的备注（按次到访记录，只读；展示时会拼在你的备注之前）：
+      </div>
+      <div class="note-block">{{.RondNote}}</div>
+    </div>
+    {{end}}
+    <form method="post" action="/admin/place/note" id="note-form">
+      <input type="hidden" name="src_pk" value="{{.Place.SrcPK}}">
+      <input type="hidden" name="next" value="/places/{{.Place.ID}}">
+      <label class="f" style="max-width:420px">
+        <span>别名</span>
+        <input type="text" name="alias" value="{{.Place.Alias}}" maxlength="60" placeholder="{{.Place.Name}}">
+      </label>
+      <label class="f" style="max-width:640px">
+        <span>备注</span>
+        <textarea name="note" rows="3" maxlength="2000" placeholder="例如：和谁来的、什么印象">{{.MyNote}}</textarea>
+      </label>
+      <button class="btn primary" type="submit">保存</button>
+    </form>
+  </div>
+  {{else if .Place.Note}}
+  <div class="card" style="margin-bottom:16px"><h2>备注</h2><div class="note-block">{{.Place.Note}}</div></div>
+  {{end}}
+
+  {{if .IsAdmin}}
+  <div class="card" style="margin-bottom:16px">
+    <h2>地点图片</h2>
+    <div class="card-sub">
+      选好图就<b>自动上传并立即生效</b>，不用再点保存。
+      上传前会<b>在浏览器里转成 WebP</b>（长边 2000px），服务器只负责收下与转存，不做转码。
+      当前存储：<b>{{if eq .ImageBackend "s3"}}对象存储（S3 / R2）{{else if eq .ImageBackend "local"}}服务器本地磁盘{{else}}{{.ImageBackend}}{{end}}</b>
+      ，最多 {{.ImageMaxPer}} 张。传完访客在地点页点「图片」就能看到。
+    </div>
+    <div id="imgs-admin" data-src="{{.Place.SrcPK}}">
+      <div class="imgs-grid" id="imgs-grid">
+        {{range .Images}}
+        <figure class="imgs-cell" data-id="{{.ID}}">
+          <img src="{{.URL}}" alt="" loading="lazy">
+          <button type="button" class="imgs-del" data-id="{{.ID}}" title="删除这张">×</button>
+        </figure>
+        {{end}}
+      </div>
+      <div class="row" style="margin-top:12px;gap:10px">
+        <label class="btn primary" for="imgs-input" id="imgs-pick" style="cursor:pointer">＋ 选择图片</label>
+        <input type="file" id="imgs-input" accept="image/*" multiple hidden>
+        <span class="muted" id="imgs-count" style="font-size:12.5px"></span>
+      </div>
+      <div class="imgs-hint" id="imgs-hint"></div>
+    </div>
+  </div>
+  {{end}}
+
+  {{if or .IsAdmin .Settings.MarksPublic}}
+  <div class="card" style="margin-bottom:16px">
+    <h2>推荐 / 踩雷</h2>
+
+    {{if .IsAdmin}}
+    {{/* 站长这里只放自己的结论；访客票数只读展示，避免同一块地方出现两套投票按钮 */}}
+    <div class="card-sub">值得再去就👍，踩雷避坑就👎。改主意了点一下已选中的按钮即可取消。</div>
+    <div class="vote-row" data-verdict-row data-src="{{.Place.SrcPK}}">
+      <span class="vote-label">我的结论</span>
+      <span class="vote-btns">
+        <button class="vote-btn up {{if eq .Verdict 1}}on{{end}}" type="button" data-verdict="1">👍 推荐</button>
+        <button class="vote-btn down {{if eq .Verdict -1}}on{{end}}" type="button" data-verdict="-1">👎 踩雷</button>
+      </span>
+      <span class="vote-tip" data-cur="{{.Verdict}}"></span>
+    </div>
+    <div class="vote-row">
+      <span class="vote-label">访客票数</span>
+      <span class="vote-btns">
+        <span class="vote-btn up ro">👍 <span class="up-n">{{num .Votes.Up}}</span></span>
+        <span class="vote-btn down ro">👎 <span class="down-n">{{num .Votes.Down}}</span></span>
+      </span>
+      <span class="vote-tip">只读</span>
+    </div>
+    {{else}}
+    <div class="card-sub">值得再去就👍，踩雷避坑就👎。改主意了点一下已选中的按钮即可取消。</div>
+    <div class="vote-row" data-visitor-row data-src="{{.Place.SrcPK}}">
+      <span class="vote-label">大家怎么说</span>
+      <span class="vote-btns">
+        <button class="vote-btn up" type="button" data-vote="1">👍 <span class="up-n">{{.Votes.Up}}</span></button>
+        <button class="vote-btn down" type="button" data-vote="-1">👎 <span class="down-n">{{.Votes.Down}}</span></button>
+      </span>
+      <span class="vote-tip" data-mine="{{.MyVote}}"></span>
+    </div>
+    {{end}}
+  </div>
+  <script>
+  (function () {
+    var POST = { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, credentials: 'same-origin' };
+
+    // 站长结论：AJAX 提交，避免整页刷新把还没保存的备注冲掉
+    var vrow = document.querySelector('.vote-row[data-verdict-row]');
+    if (vrow) {
+      var cur = Number(vrow.querySelector('.vote-tip').getAttribute('data-cur')) || 0;
+      var vtip = vrow.querySelector('.vote-tip');
+      var paintVerdict = function () {
+        vrow.querySelectorAll('.vote-btn').forEach(function (b) {
+          b.classList.toggle('on', Number(b.getAttribute('data-verdict')) === cur);
+        });
+        vtip.textContent = cur === 1 ? '已标记 · 推荐' : cur === -1 ? '已标记 · 踩雷' : '未标记';
+      };
+      paintVerdict();
+      vrow.querySelectorAll('.vote-btn').forEach(function (b) {
+        b.addEventListener('click', function () {
+          var v = Number(b.getAttribute('data-verdict'));
+          fetch('/api/verdict', Object.assign({
+            body: 'src_pk=' + vrow.getAttribute('data-src') + '&verdict=' + (cur === v ? 0 : v)
+          }, POST)).then(function (r) { return r.json(); }).then(function (d) {
+            if (d.error) { alert(d.error); return; }
+            cur = Number(d.verdict) || 0;
+            paintVerdict();
+          }).catch(function () {});
+        });
+      });
+    }
+
+    // 访客票：一人一票，再点一次撤回
+    var row = document.querySelector('.vote-row[data-visitor-row]');
+    if (!row) return;
+    var src = row.getAttribute('data-src');
+    var mine = Number(row.querySelector('.vote-tip').getAttribute('data-mine')) || 0;
+    function paint(m) {
+      mine = m;
+      row.querySelectorAll('.vote-btn').forEach(function (b) {
+        b.classList.toggle('on', Number(b.getAttribute('data-vote')) === mine);
+      });
+      var tip = row.querySelector('.vote-tip');
+      if (tip) tip.textContent = mine === 1 ? '你投了推荐' : mine === -1 ? '你投了踩雷' : '';
+    }
+    paint(mine);
+    row.querySelectorAll('.vote-btn').forEach(function (b) {
+      b.addEventListener('click', function () {
+        var v = Number(b.getAttribute('data-vote'));
+        b.disabled = true;
+        fetch('/api/vote', Object.assign({
+          body: 'src_pk=' + encodeURIComponent(src) + '&vote=' + v
+        }, POST)).then(function (r) { return r.json(); }).then(function (d) {
+          b.disabled = false;
+          if (d.error) { alert(d.error); return; }
+          row.querySelector('.up-n').textContent = d.up;
+          row.querySelector('.down-n').textContent = d.down;
+          paint(Number(d.mine) || 0);
+        }).catch(function () { b.disabled = false; });
+      });
+    });
+  })();
+  </script>
+  {{end}}
+
+  <div class="grid g2">
+    <div class="card">
+      <h2>位置</h2>
+      <div class="card-sub">底图：GCJ-02（与记录坐标同系，无需纠偏）</div>
+      <div id="place-map" class="map-preview" style="height:280px"></div>
+    </div>
+
+    <div class="card">
+      <h2>到访记录</h2>
+      <div class="card-sub">最近 {{num (len .Visits)}} 次</div>
+      <div class="list" style="max-height:280px;overflow-y:auto">
+        {{range .Visits}}
+        <div class="item" style="grid-template-columns:34px 1fr auto">
+          <div class="ic" style="background:{{colorof .Color}}22;width:30px;height:30px;font-size:15px">{{iconor .Icon "📍"}}</div>
+          <div>
+            <div class="t" style="font-weight:400">{{day .Arrival}}</div>
+            <div class="m">{{hm .Arrival}} – {{if .Departure}}{{hm .Departure}}{{else}}进行中{{end}}{{if .Remark}} · {{.Remark}}{{end}}</div>
+          </div>
+          <div class="r">{{dur .DurationMin}}</div>
+        </div>
+        {{end}}
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  window.addEventListener('load', function () {
+    window.rondMap.preview({ id: 'place-map', points: {{json .Points}} });
+  });
+</script>
+
+{{/* 全屏画廊：单张查看 + 左右切换 + 双击放大。
+   以前是把所有图竖着堆在一个滚动页里，手机上既不能左右滑、也不能放大。
+   容器常驻（内容由 JS 从缩略图墙同步），所以这里不用 if .Images 包着。 */}}
+<div class="imgs-modal" id="imgs-modal" hidden>
+  <div class="imgs-count" id="imgs-counter"></div>
+  <button class="imgs-close" type="button" id="imgs-close" aria-label="关闭">×</button>
+  <button class="imgs-nav imgs-prev" type="button" id="imgs-prev" aria-label="上一张" hidden>‹</button>
+  <button class="imgs-nav imgs-next" type="button" id="imgs-next" aria-label="下一张" hidden>›</button>
+  <div class="imgs-stage" id="imgs-stage">
+    <img id="imgs-img" alt="">
+  </div>
+</div>
+
+<script src="/static/js/place-image.js?v={{.AssetV}}"></script>
+<script>
+  window.addEventListener('load', function () {
+    var grid = document.getElementById('imgs-grid');
+    var modal = document.getElementById('imgs-modal');
+    var maxPer = {{.ImageMaxPer}};
+    var admin = document.getElementById('imgs-admin');
+
+    /* ---------- 全屏画廊 ----------
+     * 内容是「缩略图墙的镜像」：传图/删图之后不用刷新页面也能看到最新的，
+     * 页头那个「图片 N」按钮也一样（服务端渲染时还没有图的话，这里现补一个）。
+     * 所以下面统一由 syncGallery() 从 grid 反推，而不是各写一套。
+     */
+    var stage = document.getElementById('imgs-stage');
+    var viewImg = document.getElementById('imgs-img');
+    var counter = document.getElementById('imgs-counter');
+    var prevBtn = document.getElementById('imgs-prev');
+    var nextBtn = document.getElementById('imgs-next');
+    var urls = [];
+    var idx = 0;
+
+    function cellURLs() {
+      return [].map.call(document.querySelectorAll('#imgs-grid .imgs-cell img'), function (i) {
+        return i.getAttribute('src');
+      });
+    }
+
+    function paint() {
+      if (!urls.length) return;
+      viewImg.src = urls[idx];
+      counter.textContent = (idx + 1) + ' / ' + urls.length;
+      var many = urls.length > 1;
+      prevBtn.hidden = nextBtn.hidden = !many;
+      // 换图后回到「适应屏幕」状态，否则下一张会继承上一张的放大
+      stage.classList.remove('zoomed');
+      stage.scrollTop = stage.scrollLeft = 0;
+    }
+    function goto(i) {
+      if (!urls.length) return;
+      idx = (i % urls.length + urls.length) % urls.length;
+      paint();
+    }
+
+    function openGallery(on) {
+      modal.hidden = !on;
+      // 打开时锁住背景滚动，否则滑到尽头会把后面的页面一起带着滚
+      document.body.style.overflow = on ? 'hidden' : '';
+      if (on) {
+        urls = cellURLs();
+        idx = Math.min(idx, Math.max(0, urls.length - 1));
+        paint();
+      } else {
+        stage.classList.remove('zoomed');
+      }
+    }
+
+    function syncGallery() {
+      urls = cellURLs();
+      var btn = document.getElementById('imgs-open');
+      if (!urls.length) {
+        if (btn) btn.remove();
+        if (modal) modal.hidden = true;
+        return;
+      }
+      if (!btn) {
+        btn = document.createElement('button');
+        btn.className = 'btn';
+        btn.type = 'button';
+        btn.id = 'imgs-open';
+        var head = document.querySelector('.page-head .row');
+        if (head) head.appendChild(btn);
+      }
+      btn.innerHTML = '图片 <span class="muted">' + urls.length + '</span>';
+      if (idx >= urls.length) idx = 0;
+      counter.textContent = urls.length + ' 张';
+    }
+
+    modal.addEventListener('click', function (e) {
+      var cls = (e.target.className || '').indexOf('imgs-close') >= 0;
+      // 点空白或关闭按钮都关掉；点图片本身不关（可能是想放大）
+      if (e.target === modal || e.target === stage || cls) openGallery(false);
+    });
+    prevBtn.addEventListener('click', function (e) { e.stopPropagation(); goto(idx - 1); });
+    nextBtn.addEventListener('click', function (e) { e.stopPropagation(); goto(idx + 1); });
+    document.addEventListener('click', function (e) {
+      if (e.target && e.target.id === 'imgs-open') { idx = 0; openGallery(true); }
+    });
+    document.addEventListener('keydown', function (e) {
+      if (modal.hidden) return;
+      if (e.key === 'Escape') openGallery(false);
+      else if (e.key === 'ArrowLeft') goto(idx - 1);
+      else if (e.key === 'ArrowRight') goto(idx + 1);
+    });
+
+    // 手势：横向滑动=切换，轻点两下=放大/还原。两者必须在**同一个** touchend 里分流——
+    // 分成两个监听器时，滑动结束后那个监听器会把它当成一次「点按」，连滑两次就误触发双击放大。
+    var tx = 0, ty = 0, tracking = false, panning = false, lastTap = 0;
+    function toggleZoom() {
+      stage.classList.toggle('zoomed');
+      if (!stage.classList.contains('zoomed')) stage.scrollTop = stage.scrollLeft = 0;
+    }
+    stage.addEventListener('touchstart', function (e) {
+      if (e.touches.length !== 1) { tracking = false; return; }
+      tracking = true;
+      // 放大状态下拖动是「看局部」，不要再当成切换
+      panning = stage.classList.contains('zoomed');
+      tx = e.touches[0].clientX;
+      ty = e.touches[0].clientY;
+    }, { passive: true });
+    stage.addEventListener('touchend', function (e) {
+      if (!tracking) return;
+      tracking = false;
+      var t = e.changedTouches[0];
+      var dx = t.clientX - tx, dy = t.clientY - ty;
+      if (!panning && Math.abs(dx) > 40 && Math.abs(dx) > Math.abs(dy) * 1.4) {
+        goto(idx + (dx < 0 ? 1 : -1));
+        return;
+      }
+      // 手指基本没动才算「点按」，避免拖动松手被误判成双击
+      if (Math.abs(dx) > 12 || Math.abs(dy) > 12) return;
+      var now = Date.now();
+      if (now - lastTap < 300) { lastTap = 0; toggleZoom(); } else { lastTap = now; }
+    }, { passive: true });
+    stage.addEventListener('dblclick', function (e) { e.preventDefault(); toggleZoom(); });
+
+    {{if .IsAdmin}}
+    /* ---------- 站长：传图 / 删图 ---------- */
+    if (!admin || !window.rondImage) { syncGallery(); return; }
+    var srcPK = admin.getAttribute('data-src');
+    var input = document.getElementById('imgs-input');
+    var pick = document.getElementById('imgs-pick');
+    var hint = document.getElementById('imgs-hint');
+    var countEl = document.getElementById('imgs-count');
+    var ready = {{if .ImageReady}}true{{else}}false{{end}};
+
+    function setHint(msg, kind) {
+      hint.textContent = msg || '';
+      hint.className = 'imgs-hint' + (kind ? ' ' + kind : '');
+    }
+    function refreshCount() {
+      var n = grid.querySelectorAll('.imgs-cell').length;
+      countEl.textContent = n ? ('已有 ' + n + ' / ' + maxPer + ' 张') : ('还没有图片，最多 ' + maxPer + ' 张');
+    }
+
+    function cell(id, url) {
+      var fig = document.createElement('figure');
+      fig.className = 'imgs-cell';
+      fig.setAttribute('data-id', id);
+      var img = document.createElement('img');
+      img.src = url; img.loading = 'lazy'; img.alt = '';
+      var del = document.createElement('button');
+      del.type = 'button'; del.className = 'imgs-del'; del.textContent = '×'; del.title = '删除这张';
+      del.setAttribute('data-id', id);
+      fig.appendChild(img); fig.appendChild(del);
+      return fig;
+    }
+
+    refreshCount();
+    if (!ready) {
+      setHint('当前图片存储配置有问题，先修好再上传（见 conf/app.ini 的 s3_* 与后台「图片存储」）。', 'err');
+      pick.classList.add('is-disabled');
+      pick.removeAttribute('for');
+      pick.title = '图片存储未就绪';
+    }
+
+    // 选中即上传：没有「保存」这一步，所以进度和结果必须在页面上说清楚
+    input.addEventListener('change', function () {
+      var files = [].slice.call(input.files || []);
+      input.value = '';                       // 允许连着选同一张
+      if (!files.length) return;
+      admin.classList.add('imgs-busy');
+      var done = 0, failed = 0;
+      var finish = function () {
+        if (done + failed < files.length) return;
+        admin.classList.remove('imgs-busy');
+        refreshCount();
+        syncGallery();
+        if (failed) {
+          setHint('完成：成功 ' + done + ' 张，失败 ' + failed + ' 张。' +
+            (done ? '成功的那几张已经生效，刷新页面也在。' : ''), 'err');
+        } else {
+          setHint('已上传 ' + done + ' 张，已即时生效（访客刷新就能看到，不用再点保存）。', 'ok');
+        }
+      };
+      files.forEach(function (f, idx) {
+        setHint('正在处理 ' + (idx + 1) + '/' + files.length + '：' + f.name + '（浏览器转码 → 上传）…');
+        window.rondImage.toWebP(f).then(function (out) {
+          return window.rondImage.upload(srcPK, out.blob, out.width, out.height)
+            .then(function (d) {
+              if (d.error) throw new Error(d.error);
+              grid.appendChild(cell(d.id, d.url));
+              done++;
+              refreshCount();
+            });
+        }).catch(function (err) {
+          failed++;
+          setHint('「' + f.name + '」失败：' + (err && err.message ? err.message : err), 'err');
+        }).then(finish);
+      });
+    });
+
+    grid.addEventListener('click', function (e) {
+      var del = e.target.closest('.imgs-del');
+      if (!del) return;
+      var id = del.getAttribute('data-id');
+      del.disabled = true;
+      window.rondImage.remove(id).then(function (d) {
+        if (d.error) { setHint('删除失败：' + d.error, 'err'); del.disabled = false; return; }
+        var fig = grid.querySelector('.imgs-cell[data-id="' + id + '"]');
+        if (fig) fig.remove();
+        refreshCount();
+        syncGallery();
+        setHint('已删除该张，立即生效。', 'ok');
+      }).catch(function () { setHint('删除失败', 'err'); del.disabled = false; });
+    });
+    {{else}}
+    syncGallery();
+    {{end}}
+  });
+</script>
+{{end}}

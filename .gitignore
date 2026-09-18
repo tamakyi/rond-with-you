@@ -1,0 +1,25 @@
+# 构建产物
+/rond
+/rond.exe
+*.exe~
+/bin
+
+# 运行时数据
+/storage/
+/tmp/
+/shots/
+/dist/
+.tmp-test/
+.playwright-cli/
+
+# 含密钥的真实配置
+/conf/app.ini
+/conf/app-test.ini
+
+# 原始备份
+/data/
+.workbuddy/
+.tmp-test/
+
+# 开发期的临时探针/抓取产物（不属于运行时）
+/tmpfog/

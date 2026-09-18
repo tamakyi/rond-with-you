@@ -1,0 +1,245 @@
+{{define "content"}}
+<div class="wrap">
+  <div class="page-head">
+    <div>
+      <h1>数据统计</h1>
+      {{/* 备份文件名只对站长有意义，访客看到的是噪音（也是没必要暴露的信息） */}}
+      <div class="sub">{{.RangeLabel}}{{if .IsAdmin}}{{if .Dataset}} · 数据来自 {{.Dataset.Name}}{{end}}{{end}}</div>
+    </div>
+  </div>
+
+  {{if not .HasData}}
+    {{template "emptystate" .}}
+  {{else}}
+    {{template "filters" .}}
+
+    <div class="kpis" style="margin-bottom:16px">
+      <div class="kpi"><div class="v">{{num .Overview.Visits}}<small>次</small></div><div class="k">到访记录</div></div>
+      <div class="kpi"><div class="v">{{num .Overview.Places}}<small>个</small></div><div class="k">不同地点</div></div>
+      <div class="kpi"><div class="v">{{dur .Overview.DwellMin}}</div><div class="k">累计停留</div></div>
+      <div class="kpi"><div class="v">{{km .Overview.DistanceKm}}<small>km</small></div><div class="k">出行里程</div></div>
+    </div>
+
+    {{if or .IsAdmin .Settings.MarksPublic}}
+    <div class="card" style="margin-bottom:16px">
+      <h2>推荐 &amp; 踩雷</h2>
+      <div class="card-sub">
+        站长结论 推荐 {{num .VoteRec}} · 踩雷 {{num .VoteAvoid}}　|　访客票数 👍 {{num .VoteUp}} · 👎 {{num .VoteDown}}
+      </div>
+      <div class="grid g2">
+        <div>
+          <div class="muted" style="font-size:12.5px;margin-bottom:6px">👍 推荐的地点</div>
+          {{if .Recommended}}
+          <div class="chips">
+            {{range .Recommended}}<a class="chip" href="/places/{{.ID}}"><span class="dot" style="background:#34c759"></span>{{if .Name}}{{.Name}}{{else}}未命名{{end}}{{if .City}}<span class="muted"> · {{.City}}</span>{{end}}</a>{{end}}
+          </div>
+          {{else}}<div class="empty" style="padding:10px 0">还没有标记</div>{{end}}
+        </div>
+        <div>
+          <div class="muted" style="font-size:12.5px;margin-bottom:6px">👎 踩雷的地点</div>
+          {{if .Avoided}}
+          <div class="chips">
+            {{range .Avoided}}<a class="chip" href="/places/{{.ID}}"><span class="dot" style="background:#ff3b30"></span>{{if .Name}}{{.Name}}{{else}}未命名{{end}}{{if .City}}<span class="muted"> · {{.City}}</span>{{end}}</a>{{end}}
+          </div>
+          {{else}}<div class="empty" style="padding:10px 0">还没有标记</div>{{end}}
+        </div>
+      </div>
+    </div>
+    {{end}}
+
+    <div class="card">
+      <h2>月度分布</h2>
+      <div class="card-sub">每月到访次数，最高 {{num .MaxMonthly}} 次</div>
+      <div class="cols">
+        {{/* 点柱条直接筛出那个月；title 是悬停读数 */}}
+        {{range .Monthly}}<a class="col" href="{{$.MonthLink .Key}}" title="{{.Key}}：{{.Count}} 次到访。点一下只看这个月" style="height:{{.Pct}}%"></a>{{end}}
+      </div>
+      <div class="cols-x">{{range .Monthly}}<span>{{.Label}}</span>{{end}}</div>
+    </div>
+
+    <div class="grid g2">
+      <div class="card">
+        <h2>类型分布</h2>
+        <div class="card-sub">按到访次数排序</div>
+        <div class="bars">
+          {{range .ActivityStats}}
+          <a class="bar-row" href="{{$.ActLink .ID}}" title="{{.Name}}：{{num .Count}} 次，累计 {{dur .Dwell}}。点一下按这个类型筛选">
+            <div class="nm">{{with icon .Icon}}{{.}} {{end}}{{.Name}}</div>
+            <div class="bar-track"><div class="bar-fill" style="width:{{pct .Count $.MaxActivity}}%;background:{{colorof .Color}}"></div></div>
+            <div class="vv">{{num .Count}} 次 · {{dur .Dwell}}</div>
+          </a>
+          {{end}}
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>一天中的分布</h2>
+        <div class="card-sub">按到访开始时间统计</div>
+        <div class="cols" style="height:130px">
+          {{range $h, $c := .Hourly}}<div class="col" style="height:{{pct $c $.MaxHourly}}%" title="{{$h}} 时：{{$c}} 次"></div>{{end}}
+        </div>
+        <div class="cols-x">
+          {{range $h, $c := .Hourly}}<span>{{if eq $h 0}}0{{else if eq $h 6}}6{{else if eq $h 12}}12{{else if eq $h 18}}18{{else}}&nbsp;{{end}}</span>{{end}}
+        </div>
+      </div>
+    </div>
+
+    <div class="grid g2">
+      <div class="card">
+        <h2>城市排行</h2>
+        <div class="card-sub">到访次数</div>
+        <div class="bars">
+          {{range .CityStats}}
+          <a class="bar-row" href="{{$.CityLink .City}}" title="{{.City}}：{{num .Count}} 次到访、{{num .Places}} 个地点。点一下按这个城市筛选">
+            <div class="nm">{{.City}}</div>
+            <div class="bar-track"><div class="bar-fill" style="width:{{pct .Count $.MaxCity}}%"></div></div>
+            <div class="vv">{{num .Count}} 次 · {{num .Places}} 地点</div>
+          </a>
+          {{end}}
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>省级行政区</h2>
+        <div class="card-sub">覆盖情况</div>
+        <div class="tw">
+          <table class="tb">
+            <thead><tr><th>省份</th><th class="num">城市</th><th class="num">地点</th><th class="num">到访</th></tr></thead>
+            <tbody>
+              {{range .ProvinceStats}}
+              <tr>
+                <td>{{.Province}}</td>
+                <td class="num">{{num .Cities}}</td>
+                <td class="num">{{num .Places}}</td>
+                <td class="num">{{num .Count}}</td>
+              </tr>
+              {{end}}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <div class="grid g2">
+      <div class="card">
+        <h2>星期分布</h2>
+        <div class="card-sub">一周中的到访规律</div>
+        <div class="bars">
+          {{range .Weekday}}
+          {{/* 星期没有对应的筛选维度（筛选只有日期区间），所以只补悬停读数 */}}
+          <div class="bar-row" title="{{.Label}}：{{num .Count}} 次到访">
+            <div class="nm">{{.Label}}</div>
+            <div class="bar-track"><div class="bar-fill" style="width:{{pct .Count $.MaxWeekday}}%"></div></div>
+            <div class="vv">{{num .Count}} 次</div>
+          </div>
+          {{end}}
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>出行方式</h2>
+        <div class="card-sub">次数与估算里程</div>
+        {{if .Transports}}
+        <div class="tw">
+          <table class="tb">
+            <thead><tr><th>方式</th><th class="num">次数</th><th class="num">里程</th><th class="num">在途时间</th></tr></thead>
+            <tbody>
+              {{range .Transports}}
+              <tr>
+                <td><span class="dot" style="display:inline-block;background:{{colorof .Color}}"></span> {{with icon .Icon}}{{.}} {{end}}{{.Name}}</td>
+                <td class="num">{{num .Count}}</td>
+                <td class="num">{{km .Distance}} km</td>
+                <td class="num">{{dur .DwellMin}}</td>
+              </tr>
+              {{end}}
+            </tbody>
+          </table>
+        </div>
+        {{else}}<div class="empty">暂无位移记录</div>{{end}}
+      </div>
+    </div>
+
+    <div class="grid g2">
+      {{if .Tags}}
+      <div class="card">
+        <h2>标签统计</h2>
+        <div class="card-sub">自定义标签的使用情况</div>
+        <div class="bars">
+          {{range .Tags}}
+          <a class="bar-row" href="{{$.TagLink .ID}}" title="#{{.Name}}：{{num .Count}} 次到访。点一下按这个标签筛选">
+            <div class="nm"><span class="dot" style="display:inline-block;background:{{colorof .Color}}"></span> {{.Name}}</div>
+            <div class="bar-track"><div class="bar-fill" style="width:{{pct .Count $.MaxTag}}%"></div></div>
+            <div class="vv">{{num .Count}} 次</div>
+          </a>
+          {{end}}
+        </div>
+      </div>
+      {{end}}
+
+      {{if .Weather}}
+      <div class="card">
+        <h2>天气与气温</h2>
+        <div class="card-sub">记录期间经历的小时级天气</div>
+        <div class="tw">
+          <table class="tb">
+            <thead><tr><th>天气</th><th class="num">小时数</th><th class="num">平均气温</th></tr></thead>
+            <tbody>
+              {{range .Weather}}
+              <tr>
+                <td>{{condition .Condition}}</td>
+                <td class="num">{{num .Count}}</td>
+                <td class="num">{{f1 .AvgTemp}} ℃</td>
+              </tr>
+              {{end}}
+            </tbody>
+          </table>
+        </div>
+
+        {{/* 逐月平均气温：这份数据以前一直算着却没渲染（白跑一条查询），这里把它用上。
+             横向可滚动，十几根柱子挤在窄屏上也不会把月份标签压成一团。 */}}
+        {{if .Temps}}
+        <div class="temp-chart">
+          <div class="temp-head">逐月平均气温</div>
+          <div class="temp-strip">
+            {{range .Temps}}
+            <div class="temp-col" title="{{.Key}}：平均 {{f1 .AvgC}} ℃，{{num .Hours}} 小时有记录">
+              <span class="tc-v">{{f1 .AvgC}}°</span>
+              <div class="tc-track"><div class="tc-bar" style="height:{{.Pct}}%;background:{{.Color}}"></div></div>
+              <span class="tc-m">{{.Label}}</span>
+            </div>
+            {{end}}
+          </div>
+        </div>
+        {{end}}
+      </div>
+      {{end}}
+    </div>
+
+    {{if .Fog}}
+    <div class="card">
+      <h2>世界迷雾覆盖</h2>
+      <div class="card-sub">
+        迷雾快照 {{num .Fog.Blocks}} 块 / {{num .Fog.Cells}} 格，估算已探索
+        <b>{{f1 .Fog.AreaKm2}}</b> km²；地点落在已探索格内的比例即「点亮率」
+      </div>
+      <div class="kpis" style="margin-bottom:12px">
+        <div class="kpi"><div class="v">{{f1 .Fog.AreaKm2}}<small>km²</small></div><div class="k">已探索面积</div></div>
+        <div class="kpi"><div class="v">{{pct .Fog.LitPlaces .Fog.Places}}<small>%</small></div><div class="k">地点点亮率</div></div>
+        <div class="kpi"><div class="v">{{num .Fog.LitPlaces}}<small>/{{num .Fog.Places}}</small></div><div class="k">点亮地点</div></div>
+      </div>
+      {{if .Fog.Cities}}
+      <div class="bars">
+        {{range .Fog.Cities}}
+        <a class="bar-row" href="{{$.CityLink .Name}}" title="{{.Name}}：{{.Lit}}/{{.Total}} 个地点落在已探索区。点一下按这个城市筛选">
+          <div class="nm">{{.Name}}</div>
+          <div class="bar-track"><div class="bar-fill" style="width:{{pct .Lit .Total}}%;background:var(--accent)"></div></div>
+          <div class="vv">{{.Lit}}/{{.Total}}</div>
+        </a>
+        {{end}}
+      </div>
+      {{end}}
+    </div>
+    {{end}}
+  {{end}}
+</div>
+{{end}}

@@ -1,0 +1,333 @@
+{{define "content"}}
+{{if not .HasData}}
+<div class="wrap">{{template "emptystate" .}}</div>
+{{else}}
+<div class="map-page">
+  <div id="map"></div>
+
+  {{/* 时间轴回放：拖动即可按「首次到访时间」累加显示点位。
+       注意它和左侧的日期区间是两回事——区间是「只看这段时间」，
+       时间轴是「一路走到这个时刻为止」，所以放在地图底部而不是筛选面板里。 */}}
+  <div class="timeline-bar" id="timeline-bar" hidden>
+    <button class="tl-play" type="button" id="tl-play" aria-label="播放时间轴">▶</button>
+    <input type="range" id="tl-range" min="0" max="100" value="100" aria-label="时间轴">
+    <span class="tl-label" id="tl-label"></span>
+    <button class="tl-reset" type="button" id="tl-reset">全部</button>
+  </div>
+
+  {{/* 加载失败时的提示条：绝不重新加载页面，只在地图上说清楚并给一个重试按钮 */}}
+  <div class="map-status" id="map-status" hidden>
+    <span id="map-status-text"></span>
+    <button class="btn sm" type="button" id="map-retry" hidden>重试</button>
+  </div>
+
+  <div class="map-panel">
+    <form id="filter-form" method="get" action="/map">
+      <h3>时间范围</h3>
+      <div class="chips" style="margin-bottom:10px">
+        {{range .Presets}}<a class="chip {{if .Active}}on{{end}}" href="{{$.RangeLink .From .To}}">{{.Label}}</a>{{end}}
+        {{if .IsAdmin}}
+        <a class="chip {{if .ShowHomeWork}}on{{end}}" href="{{.HWLink}}" title="仅登录后的你自己可见，访客看不到这两类记录">含家/工作</a>
+        {{end}}
+      </div>
+      <div class="row" style="gap:8px;margin-bottom:10px">
+        <input type="date" name="from" value="{{.From}}" style="flex:1">
+        <input type="date" name="to" value="{{.To}}" style="flex:1">
+      </div>
+
+      {{if .Activities}}
+      <h3>地点类型</h3>
+      <div class="chips" style="margin-bottom:10px">
+        {{range $i, $a := .Activities}}{{if or (lt $i 12) ($.IsAct $a.ID)}}
+        <a class="chip {{if $.IsAct $a.ID}}on{{end}}" href="{{$.ActLink $a.ID}}">
+          <span class="dot" style="background:{{colorof $a.Color}}"></span>{{$a.Name}}
+        </a>
+        {{end}}{{end}}
+      </div>
+      {{if gt (len .Activities) 12}}
+      <details class="more-types">
+        <summary>展开其余 {{len .Activities}} 个类型</summary>
+        <div class="chips">
+          {{range $i, $a := .Activities}}{{if and (ge $i 12) (not ($.IsAct $a.ID))}}
+          <a class="chip" href="{{$.ActLink $a.ID}}"><span class="dot" style="background:{{colorof $a.Color}}"></span>{{$a.Name}}</a>
+          {{end}}{{end}}
+        </div>
+      </details>
+      {{end}}
+      {{end}}
+
+      <h3>其它条件</h3>
+      <div class="row" style="gap:8px;margin-bottom:10px">
+        <select name="city" style="flex:1">
+          <option value="">全部城市</option>
+          {{range .CityList}}<option value="{{.}}" {{if eq . $.City}}selected{{end}}>{{.}}</option>{{end}}
+        </select>
+        <select name="tag" style="flex:1">
+          <option value="0">全部标签</option>
+          {{range .TagOptions}}<option value="{{.ID}}" {{if eq .ID $.TagID}}selected{{end}}>{{.Name}}</option>{{end}}
+        </select>
+      </div>
+      <div class="row" style="gap:8px;margin-bottom:12px">
+        <select name="min" style="flex:1">
+          <option value="0" {{if eq .MinDwell 0}}selected{{end}}>不限停留</option>
+          <option value="5" {{if eq .MinDwell 5}}selected{{end}}>≥ 5 分钟</option>
+          <option value="15" {{if eq .MinDwell 15}}selected{{end}}>≥ 15 分钟</option>
+          <option value="30" {{if eq .MinDwell 30}}selected{{end}}>≥ 30 分钟</option>
+          <option value="60" {{if eq .MinDwell 60}}selected{{end}}>≥ 1 小时</option>
+        </select>
+        <input type="text" name="q" value="{{.Keyword}}" placeholder="关键词" style="flex:1">
+      </div>
+      {{range .ActivityIDs}}<input type="hidden" name="act" value="{{.}}">{{end}}
+      {{if .ShowHomeWork}}<input type="hidden" name="hw" value="1">{{end}}
+
+      <div class="row">
+        <button class="btn" type="submit" style="flex:1">查询</button>
+        <a class="btn" href="/map">重置</a>
+      </div>
+      <div class="chips" style="margin-top:10px">
+        <label class="chip" style="user-select:none"><input type="checkbox" id="track-toggle" style="accent-color:var(--accent)"> 行程轨迹</label>
+        <label class="chip" style="user-select:none"><input type="checkbox" id="heat-toggle" style="accent-color:var(--accent)"> 到访热力</label>
+        <label class="chip" style="user-select:none"><input type="checkbox" id="city-toggle" style="accent-color:var(--accent)"> 城市聚合</label>
+        <label class="chip" style="user-select:none"><input type="checkbox" id="gpx-toggle" style="accent-color:var(--accent)"> GPX 轨迹</label>
+      </div>
+      <div class="muted" style="margin-top:9px;font-size:12px">当前显示 <b id="pt-count">{{num (len .Points)}}</b> 个地点</div>
+    </form>
+  </div>
+
+  {{if .Legend}}
+  <div class="map-legend">
+    <div style="font-weight:500;color:var(--text-2)">类型分布</div>
+    {{range .Legend}}
+    <div class="lg"><i style="background:{{colorof .Color}}"></i>{{.Name}} <span class="muted">{{num .Count}}</span></div>
+    {{end}}
+  </div>
+  {{end}}
+</div>
+
+<script>
+  window.addEventListener('load', function () {
+    // 首屏不带地点数据（全量内联会让 HTML 膨胀到 ~58KB），
+    // 页面先出壳，地点走 /api/points 并行拉取后再填充。
+    window.__map = window.rondMap.full({ id: 'map', points: [] });
+
+    var form = document.getElementById('filter-form');
+    var ptCount = document.getElementById('pt-count');
+    var statusBox = document.getElementById('map-status');
+    var statusText = document.getElementById('map-status-text');
+    var retryBtn = document.getElementById('map-retry');
+
+    function qs() {
+      return new URLSearchParams(new FormData(form)).toString();
+    }
+
+    function showStatus(msg, withRetry) {
+      statusText.textContent = msg;
+      retryBtn.hidden = !withRetry;
+      statusBox.hidden = false;
+    }
+    function hideStatus() { statusBox.hidden = true; }
+
+    // HTTP 500 时 fetch 本身是成功的，紧接着 r.json() 才抛错——统一在这里判掉，
+    // 调用方就只有一个失败分支要处理。
+    function loadJSON(url) {
+      return fetch(url, { headers: { 'Accept': 'application/json' } }).then(function (r) {
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        return r.json();
+      });
+    }
+
+    /* 以前这里是 `.catch(function () { form.submit(); })`：接口一失败就整页重提交，
+       而重提交后的新页面又走同一条路 —— 实测 8 秒内自刷 17 次、接口被拒 16 次、
+       访客看不到任何解释，服务器被反复打（1C1G 上尤其难受）。
+       现在改成：有限次自动重试 + 明确提示 + 手动重试按钮，**任何情况下都不重新加载页面**。 */
+    var RETRY_DELAYS = [1000, 3000];
+
+    // 返回的 promise 一定 resolve（true/false），不会 reject——避免未处理的 rejection，
+    // 也让调用方只需判断「这次到底加载成功了没」。
+    function loadPoints(q, attempt) {
+      attempt = attempt || 0;
+      return loadJSON('/api/points' + (q ? '?' + q : '')).then(function (d) {
+        var pts = d.points || [];
+        // 先交给时间轴：它自己会在「有时间的点」上做过滤再决定画什么
+        setupTimeline(pts);
+        window.rondMap.setPoints(pts);
+        ptCount.textContent = pts.length;
+        hideStatus();
+        return true;
+      }).catch(function (err) {
+        var why = (err && err.message) ? err.message : '网络异常';
+        if (attempt < RETRY_DELAYS.length) {
+          showStatus('地点加载失败（' + why + '），正在重试…', false);
+          return new Promise(function (res) { setTimeout(res, RETRY_DELAYS[attempt]); })
+            .then(function () { return loadPoints(q, attempt + 1); });
+        }
+        showStatus('地点加载失败（' + why + '）。地图上暂时没有点，可以点右侧重试。', true);
+        return false;
+      });
+    }
+
+    function reloadPoints(q) {
+      // 地图页的筛选是 AJAX 换数据、不跳页，所以顶部进度条要自己收
+      if (window.rondProgress) window.rondProgress.start();
+      return loadPoints(q).then(function (ok) {
+        if (ok && document.getElementById('track-toggle').checked) refreshTrack();
+        if (window.rondProgress) window.rondProgress.finish();
+        return ok;
+      });
+    }
+
+    // 与列表页保持一致：下拉 / 日期改动即生效，不用再点「应用筛选」。
+    // 关键词仍然回车才查（每敲一个字都发请求很难受）。
+    // 这里走的是本页自己的 submit 处理器（AJAX 换数据），所以用 requestSubmit。
+    form.addEventListener('change', function (e) {
+      var el = e.target;
+      if (!el || !el.name) return;
+      if (el.tagName === 'SELECT' || el.type === 'date') {
+        if (form.requestSubmit) form.requestSubmit();
+        else form.submit();
+      }
+    });
+
+    retryBtn.addEventListener('click', function () {
+      retryBtn.hidden = true;
+      hideStatus();
+      reloadPoints(qs());
+    });
+    // 从后台切回来时顺手重试一次：多半是刚才断网/休眠导致的失败
+    document.addEventListener('visibilitychange', function () {
+      if (!document.hidden && !statusBox.hidden) retryBtn.click();
+    });
+
+    /* ---------- 时间轴回放 ----------
+     * 每个点带着「首次到访时间」（ft，Unix 秒），拖动滑块就把 ft ≤ 截止时刻的点留下。
+     * 这样得到的是「一路走到这个时刻，足迹长什么样」的累加效果。
+     * 实现上不去逐点改样式，而是复用 setPoints 整体重画——点位规模是几百，
+     * 且只在「日期真的变了」时才重画（拖动一次可能跨很多像素但只跨几天）。
+     */
+    var tlBar = document.getElementById('timeline-bar');
+    var tlRange = document.getElementById('tl-range');
+    var tlLabel = document.getElementById('tl-label');
+    var tlPlay = document.getElementById('tl-play');
+    var allPoints = [];      // 最近一次拉取到的全部点（时间轴始终在它上面过滤）
+    var tlMin = 0, tlMax = 0, tlDay = 86400, tlLastDay = null, tlTimer = null;
+
+    function fmtDay(sec) {
+      var d = new Date(sec * 1000);
+      return d.getFullYear() + '-' + ('0' + (d.getMonth() + 1)).slice(-2);
+    }
+
+    function applyTimeline() {
+      if (!allPoints.length) return;
+      var cut = Number(tlRange.value);
+      // 只跟着「天」变化重画：拖动时像素变化远多于天数变化，不然一帧要重画好几次
+      var day = Math.floor(cut / tlDay);
+      if (day === tlLastDay) return;
+      tlLastDay = day;
+      var sub = [], shown = 0;
+      for (var i = 0; i < allPoints.length; i++) {
+        var p2 = allPoints[i];
+        // 「截至某日」要把那一天也算进去，否则拖到最左会是一个空地图
+        if (!p2.ft || p2.ft < cut + tlDay) { sub.push(p2); shown++; }
+      }
+      // keepView：拖动/播放时不要重新 fit 视野，不然地图会跟着不停缩放，很晕
+      window.rondMap.setPoints(sub, { keepView: true });
+      tlLabel.textContent = fmtDay(cut) + ' · ' + shown + '/' + allPoints.length + ' 个点';
+    }
+
+    function setupTimeline(pts) {
+      allPoints = pts;
+      var withTime = pts.filter(function (p2) { return p2.ft; });
+      if (withTime.length < 2) { tlBar.hidden = true; return; }
+      tlMin = withTime[0].ft;
+      tlMax = withTime[0].ft;
+      for (var i = 1; i < withTime.length; i++) {
+        if (withTime[i].ft < tlMin) tlMin = withTime[i].ft;
+        if (withTime[i].ft > tlMax) tlMax = withTime[i].ft;
+      }
+      // 两端都对齐到「天」：input[type=range] 的可取值为 min + k*step，
+      // max 不是 step 的整数倍时**根本取不到 max**，全量时就会少算几个点。
+      tlMin = Math.floor(tlMin / tlDay) * tlDay;
+      tlMax = Math.ceil(tlMax / tlDay) * tlDay;
+      tlRange.min = tlMin;
+      tlRange.max = tlMax;
+      tlRange.step = tlDay;
+      tlRange.value = tlMax;
+      tlLastDay = null;
+      tlBar.hidden = false;
+      applyTimeline();
+    }
+
+    tlRange.addEventListener('input', function () {
+      if (tlTimer) return;                 // 一帧只重画一次，拖起来才不卡
+      tlTimer = requestAnimationFrame(function () { tlTimer = null; applyTimeline(); });
+    });
+    tlRange.addEventListener('change', function () { tlLastDay = null; applyTimeline(); });
+    document.getElementById('tl-reset').addEventListener('click', function () {
+      stopPlay();
+      tlRange.value = tlMax;
+      tlLastDay = null;
+      applyTimeline();
+    });
+
+    // 播放：约 12 秒走完整个跨度（按天推进，和拖动走同一条路径）
+    function stopPlay() {
+      if (tlTimer) { cancelAnimationFrame(tlTimer); tlTimer = null; }
+      if (tlPlay._t) { clearInterval(tlPlay._t); tlPlay._t = null; }
+      tlPlay.textContent = '▶';
+      tlPlay.setAttribute('aria-label', '播放时间轴');
+    }
+    tlPlay.addEventListener('click', function () {
+      if (tlPlay._t) { stopPlay(); return; }
+      if (Number(tlRange.value) >= tlMax) { tlRange.value = tlMin; tlLastDay = null; }
+      tlPlay.textContent = '⏸';
+      tlPlay.setAttribute('aria-label', '暂停');
+      var steps = Math.max(1, Math.round((tlMax - Number(tlRange.value)) / tlDay));
+      var perTick = Math.max(1, Math.ceil(steps / 240));   // 最多约 240 帧，约 12 秒
+      tlPlay._t = setInterval(function () {
+        var next = Number(tlRange.value) + perTick * tlDay;
+        if (next >= tlMax) { next = tlMax; stopPlay(); }
+        tlRange.value = next;
+        applyTimeline();
+      }, 50);
+    });
+
+    reloadPoints(qs());
+    form.addEventListener('submit', function (e) {
+      e.preventDefault();
+      var q = qs();
+      history.replaceState(null, '', '/map' + (q ? '?' + q : ''));
+      reloadPoints(q);
+    });
+
+    var trackOn = false;
+    function refreshTrack() {
+      if (!trackOn) { window.rondMap.setTrack(null, null); return; }
+      var q = qs();
+      loadJSON('/api/track' + (q ? '?' + q : ''))
+        .then(function (d) { window.rondMap.setTrack(d.segs || [], d.modes || []); })
+        // 轨迹拉不到只影响这一层，不阻塞地图本身；安静失败 + 取消勾选，别让开关停在"已选但没线"的状态
+        .catch(function (err) {
+          trackOn = false;
+          document.getElementById('track-toggle').checked = false;
+          window.rondMap.setTrack(null, null);
+          showStatus('行程轨迹加载失败（' + ((err && err.message) || '网络异常') + '），已取消勾选。', false);
+          setTimeout(hideStatus, 4000);
+        });
+    }
+    document.getElementById('track-toggle').addEventListener('change', function () {
+      trackOn = this.checked;
+      refreshTrack();
+    });
+    document.getElementById('heat-toggle').addEventListener('change', function () {
+      window.rondMap.setHeat(this.checked);
+    });
+    document.getElementById('city-toggle').addEventListener('change', function () {
+      window.rondMap.setCityAgg(this.checked);
+    });
+    document.getElementById('gpx-toggle').addEventListener('change', function () {
+      window.rondMap.setGpx(this.checked);
+    });
+  });
+</script>
+{{end}}
+{{end}}

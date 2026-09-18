@@ -1,0 +1,60 @@
+{{define "content"}}
+<div class="wrap">
+  <div class="page-head">
+    <div>
+      <h1>时间线</h1>
+      <div class="sub">共 {{num .Total}} 条到访记录 · {{.RangeLabel}}</div>
+    </div>
+  </div>
+
+  {{if not .HasData}}
+    {{template "emptystate" .}}
+  {{else}}
+    {{template "filters" .}}
+
+    {{if .Days}}
+      <div class="card">
+        <div class="row" style="margin-bottom:6px">
+          <a class="btn sm {{if eq .Sort ""}}primary{{end}}" href="{{.Link .FilterBase "sort" ""}}">最新在前</a>
+          <a class="btn sm {{if eq .Sort "asc"}}primary{{end}}" href="{{.Link .FilterBase "sort" "asc"}}">最早在前</a>
+        </div>
+      </div>
+
+      {{range .Days}}
+      <div class="timeline-day">
+        <div class="dh">
+          <span>{{.Label}}</span>
+          <span class="muted">{{num (len .Items)}} 条 · 停留 {{dur .Dwell}}</span>
+        </div>
+        {{range .Items}}
+        <div class="tl-item">
+          <div class="tm">{{hm .Arrival}}</div>
+          <div class="ln"><i style="background:{{colorof .Color}}"></i></div>
+          <div class="bd">
+            <div>
+              {{if .PlaceID}}<a href="/places/{{.PlaceID}}">{{if .PlaceName}}{{.PlaceName}}{{else}}未命名地点{{end}}</a>{{else}}未命名地点{{end}}
+              {{if .ActivityName}}<span class="chip" style="padding:1px 8px;font-size:11.5px"><span class="dot" style="background:{{colorof .Color}}"></span>{{.ActivityName}}</span>{{end}}
+              {{range .Tags}}<span class="tag">{{.}}</span>{{end}}
+            </div>
+            <div class="meta">
+              {{if .Departure}}{{hm .Arrival}} – {{hm .Departure}} · {{end}}停留 {{dur .DurationMin}}
+              {{if .City}} · {{.City}}{{end}}
+              {{if .Remark}} · {{.Remark}}{{end}}
+            </div>
+          </div>
+        </div>
+        {{end}}
+      </div>
+      {{end}}
+
+      {{template "pager" .}}
+    {{else}}
+      <div class="card"><div class="empty">
+        <div class="big">📭</div>
+        <div>没有符合条件的到访记录。</div>
+        <div style="margin-top:12px"><a class="btn" href="{{.FilterBase}}">清空筛选条件</a></div>
+      </div></div>
+    {{end}}
+  {{end}}
+</div>
+{{end}}

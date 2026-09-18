@@ -1,0 +1,1081 @@
+{{define "content"}}
+<div class="wrap">
+  <div class="page-head">
+    <div>
+      <h1>数据编辑</h1>
+      <div class="sub">手动补录没带手机时的记录点（新增地点 / 到访 / 行程 / 天气），改完在下方一键导出为 <span class="mono">.rondbackup</span></div>
+    </div>
+    <div class="row">
+      <button class="btn" type="button" id="fold-all">全部折叠</button>
+      <a class="btn" href="/admin">返回后台</a>
+      <a class="btn primary" href="/admin/export/rondbackup">导出 rondbackup</a>
+    </div>
+  </div>
+
+  {{if .Flash}}<div class="alert ok">{{.Flash}}</div>{{end}}
+  {{if .Err}}<div class="alert err">{{.Err}}</div>{{end}}
+
+  {{if not .HasData}}
+    {{template "emptystate" .}}
+  {{else}}
+  {{if not .CanExport}}<div class="alert err">导出所需要的基线库暂不可用（当初上传的原始 <span class="mono">.rondbackup</span> 可能已被清理）。请到<a href="/admin">后台</a>重新上传一次该备份文件，即可恢复导出。</div>{{end}}
+
+  <div class="card" data-card="place-new">
+    <h2>新增地点</h2>
+    <div class="card-sub">按名称搜索可直接填入坐标；也可在地图上点击选点，坐标为 GCJ-02（与 rond 记录同系）。</div>
+    {{if .GeocodeReady}}
+    <div class="search-row">
+      <label class="f"><span>按名称搜索坐标</span>
+        <input type="text" id="geo-q" placeholder="如：杭州西湖 / 上海外滩 / 某某小区" autocomplete="off">
+      </label>
+      <button class="btn" type="button" id="geo-go">搜索</button>
+    </div>
+    <div id="geo-msg" class="card-sub" style="margin:0 0 6px"></div>
+    <div id="geo-list" class="geo-list"></div>
+    {{else}}
+    <div class="card-sub" style="margin:0 0 10px">按名称搜坐标未启用：在 <span class="mono">conf/app.ini</span> 填 <span class="mono">geocode_key</span>（高德 Web 服务 Key，免费）后重启即可。</div>
+    {{end}}
+    <form method="post" action="/admin/edit/place">
+      <div class="row" style="align-items:center;margin-bottom:10px">
+        <label class="check" style="margin:0"><input type="radio" name="mode" value="new" checked> 新建地点</label>
+        <label class="check" style="margin:0"><input type="radio" name="mode" value="existing"> 给已有地点补到访</label>
+      </div>
+      <div id="mode-new">
+        <div class="req-tip"><b class="req">*</b>名称、坐标必填；坐标可搜索或地图点选自动填入</div>
+        <div class="row">
+          <label class="f" style="flex:2 1 200px"><span>名称<b class="req">*</b></span><input type="text" name="name" placeholder="如：某某公园"></label>
+          <label class="f" style="flex:1 1 130px"><span>类别</span>
+            <select name="category" class="cat-select">
+              <option value="">未指定</option>
+              {{range .Categories}}<option value="{{.Label}}">{{.Name}}</option>{{end}}
+              <option value="__custom__">自定义…</option>
+            </select>
+          </label>
+          <label class="f cat-custom" style="flex:1 1 130px;display:none"><span>自定义类别</span><input type="text" name="category_custom" placeholder="如 公园"></label>
+          <label class="f" style="flex:1 1 130px"><span>纬度<b class="req">*</b></span><input type="text" name="lat" placeholder="30.123456"></label>
+          <label class="f" style="flex:1 1 130px"><span>经度<b class="req">*</b></span><input type="text" name="lon" placeholder="120.123456"></label>
+        </div>
+        <div class="row">
+          <label class="f" style="flex:1 1 120px"><span>国家代码</span><input type="text" name="country" placeholder="CN"></label>
+          <label class="f" style="flex:1 1 120px"><span>省份</span><input type="text" name="province"></label>
+          <label class="f" style="flex:1 1 120px"><span>城市</span><input type="text" name="city"></label>
+          <label class="f" style="flex:1 1 120px"><span>区县</span><input type="text" name="district"></label>
+          <label class="f" style="flex:1 1 140px"><span>街道</span><input type="text" name="thoroughfare"></label>
+          <label class="f" style="flex:1 1 120px"><span>时区</span><input type="text" name="timezone" placeholder="Asia/Shanghai"></label>
+        </div>
+        <div id="picker-map" style="height:260px;border-radius:10px;border:1px solid var(--line);margin:4px 0 12px"></div>
+      </div>
+      <div id="mode-existing" style="display:none">
+        <div class="req-tip"><b class="req">*</b>搜索并选中地点后，请在下方到访时段里填写到达时间</div>
+        <label class="f" style="max-width:520px"><span>地点<b class="req">*</b></span>
+          <div class="picker" data-source="place-options">
+            <input type="text" class="picker-input" placeholder="输入名称 / 城市 / #编号 过滤" autocomplete="off">
+            <input type="hidden" name="existing_place">
+            <div class="picker-picked" style="display:none;margin:4px 0 0">
+              已选：<b class="picker-picked-label"></b>
+              <a href="javascript:void(0)" class="picker-clear" style="margin-left:6px">重选</a>
+            </div>
+            <div class="picker-results geo-list" style="display:none;max-height:240px"></div>
+          </div>
+        </label>
+        <select id="place-options" hidden>
+          {{range .PlaceOptions}}<option value="{{.ID}}">{{.Label}}</option>{{end}}
+        </select>
+        <select id="visit-options" hidden>
+          {{range .VisitOptions}}<option value="{{.SrcPK}}">{{.Label}}</option>{{end}}
+        </select>
+      </div>
+      <div class="card-sub" style="margin:0 0 8px">到访时段<b>选填</b>：留空则只记录地点；填了就追加一条独立的到访（如某次忘带手机的那段），不影响该地点已有记录。离开时间留空表示只记了到达；时间凭记忆填个大概即可（5 分钟步进）。</div>
+      <div class="row">
+        <label class="f" style="flex:1 1 170px"><span>到达时间</span><input type="datetime-local" name="arrival"></label>
+        <label class="f" style="flex:1 1 170px"><span>离开时间</span><input type="datetime-local" name="departure"></label>
+        <label class="f" style="flex:1 1 170px">
+          <span class="span-actions">活动
+            <span class="mini-actions">
+              <a href="javascript:void(0)" id="activity-rename">改名</a>
+              <a href="javascript:void(0)" id="activity-delete" class="danger">删除</a>
+            </span>
+          </span>
+          <select name="activity_id" id="activity-select">
+            <option value="">未指定</option>
+            {{range .Activities}}<option value="{{.ID}}">{{.Name}}</option>{{end}}
+          </select>
+        </label>
+        <label class="f" style="flex:1 1 170px"><span>新建活动</span>
+          <div class="input-btn">
+            <input type="text" id="new-activity-name" placeholder="名称">
+            <button type="button" class="btn" id="activity-add">添加</button>
+          </div>
+        </label>
+        <label class="f" style="flex:1 1 140px"><span>备注</span><input type="text" name="remark" placeholder="可选"></label>
+      </div>
+      <label class="check"><input type="checkbox" name="bookmarked"> 标记为收藏</label>
+      {{if .Tags}}
+      <div class="chips" style="margin:6px 0 10px">
+        {{range .Tags}}<label class="chip" style="cursor:pointer"><input type="checkbox" name="tags" value="{{.ID}}" style="margin-right:5px">{{.Name}}</label>{{end}}
+      </div>
+      {{end}}
+      <button class="btn primary" type="submit">提交</button>
+    </form>
+  </div>
+
+  <div class="card" data-card="places">
+    <h2>地点列表</h2>
+    <form method="get" action="/admin/edit" class="filter-row" style="margin-top:6px">
+      <label class="f" style="flex:1 1 200px"><span>搜索</span><input type="text" name="q" value="{{.Query}}" placeholder="名称 / 城市 / 区县"></label>
+      <label class="f" style="flex:0 1 170px"><span>坐标来源</span>
+        <select name="src">
+          <option value="">全部</option>
+          {{range .PlaceSources}}<option value="{{.Value}}"{{if eq $.SourceFilter .Value}} selected{{end}}>{{.Label}}{{if $.SourceCount .Value}}（{{$.SourceCount .Value}}）{{end}}</option>{{end}}
+          <option value="none"{{if eq .SourceFilter "none"}} selected{{end}}>未留档{{if .SourceCount "none"}}（{{.SourceCount "none"}}）{{end}}</option>
+        </select>
+      </label>
+      <label class="f" style="flex:0 1 170px"><span>坐标系</span>
+        <select name="sus">
+          <option value="">全部</option>
+          <option value="1"{{if .SuspectOnly}} selected{{end}}>只看疑似 WGS-84{{if .SuspectCount}}（{{.SuspectCount}}）{{end}}</option>
+        </select>
+      </label>
+      {{if .VisitQuery}}<input type="hidden" name="vq" value="{{.VisitQuery}}">{{end}}
+      <div class="act"><button class="btn" type="submit">筛选</button><a class="btn" href="/admin/edit{{if .VisitQuery}}?vq={{.VisitQuery}}{{end}}">重置</a></div>
+    </form>
+    <div class="card-sub">共 {{num .Total}} 个地点，按到访数排序{{if .SuspectCount}}；其中 <b>{{num .SuspectCount}}</b> 个的显示坐标疑似就是 WGS-84（当初没做偏移，底图上会偏 500 米左右），行内已标注{{end}}。「坐标来源」是建点时留下的记录：照片导入会把当时选的坐标系一起记下来，<b>未留档</b>的是 2026-09 之前的行，只能靠原图或行内标注判断。</div>
+    {{if .Places}}
+    <div class="tw">
+      <table class="tb">
+        <thead><tr><th>名称</th><th>城市</th><th>坐标</th><th class="num">到访</th><th></th></tr></thead>
+        <tbody>
+        {{range .Places}}
+          <tr id="place-row-{{.SrcPK}}"{{if and $.OpenSrcPK (eq .SrcPK $.OpenSrcPK)}} class="located"{{end}}>
+            <td>{{if .Name}}{{.Name}}{{else}}<span class="muted">（未命名）</span>{{end}} <span class="muted mono">#{{.SrcPK}}</span></td>
+            <td class="muted">{{.City}}{{if .District}} · {{.District}}{{end}}{{if .Thoroughfare}} · {{.Thoroughfare}}{{end}}</td>
+            <td class="muted mono">{{printf "%.5f" .Lat}}, {{printf "%.5f" .Lon}}
+              <br><span class="tag{{if not .CoordSource}} warn{{end}}" title="{{if .CoordSource}}建点时留下的坐标来源记录{{else}}这行建于 2026-09 之前，没有坐标来源留档；坐标是否做过偏移只能靠原图 EXIF 或行内标注判断{{end}}">{{.SourceTag}}</span>
+              {{if .SuspectWGS}}<span class="tag warn" title="导入留档里的原始 GPS 与显示坐标完全相同，说明当初没做 GCJ-02 偏移。在 GCJ-02 底图上会整体偏 500 米左右——用行内「编辑」→ 坐标系换算修。">疑似 WGS-84</span>{{end}}
+              {{if .MovedM}}<br><span class="muted">比导入时移动了 {{num .MovedM}} 米</span>{{end}}</td>
+            <td class="num">{{num .VisitCount}}</td>
+            <td style="white-space:nowrap">
+              <details class="inline-edit"{{if and $.OpenSrcPK (eq .SrcPK $.OpenSrcPK)}} open{{end}}>
+                <summary class="btn sm">编辑</summary>
+                <form method="post" action="/admin/edit/place/update" style="margin-top:8px;min-width:280px">
+                  <input type="hidden" name="src_pk" value="{{.SrcPK}}">
+                  <label class="f"><span>名称<b class="req">*</b></span><input type="text" name="name" value="{{.Name}}" required></label>
+                  <label class="f"><span>类别</span>
+                    <select name="category" class="cat-select">
+                      <option value="">未指定</option>
+                      {{$cur := .Category}}
+                      {{range .CategoryOptions}}<option value="{{.Label}}"{{if eq .Label $cur}} selected{{end}}>{{.Name}}</option>{{end}}
+                      <option value="__custom__">自定义…</option>
+                    </select>
+                  </label>
+                  <label class="f cat-custom" style="display:none"><span>自定义类别</span><input type="text" name="category_custom" placeholder="如 公园"></label>
+                  <div class="row">
+                    <label class="f" style="flex:1 1 120px"><span>纬度<b class="req">*</b></span><input type="text" name="lat" value="{{printf "%.6f" .Lat}}" required></label>
+                    <label class="f" style="flex:1 1 120px"><span>经度<b class="req">*</b></span><input type="text" name="lon" value="{{printf "%.6f" .Lon}}" required></label>
+                  </div>
+                  <div class="row">
+                    <label class="f" style="flex:1 1 210px"><span>坐标系换算</span>
+                      <select class="coord-sel">
+                        <option value="">保持原样</option>
+                        <option value="wgs2gcj">这条其实是 WGS-84 → 转成 GCJ-02</option>
+                        <option value="gcj2wgs">这条其实是 GCJ-02 → 转成 WGS-84</option>
+                      </select>
+                    </label>
+                    <div class="coord-diff card-sub" style="flex:2 1 260px;margin:0 0 8px"></div>
+                  </div>
+                  {{if .MovedM}}<div class="card-sub" style="margin:0 0 8px">导入时的坐标：<span class="mono">{{printf "%.6f" .OrigLat.Float64}}, {{printf "%.6f" .OrigLon.Float64}}</span>（现在比它偏了 {{num .MovedM}} 米）</div>{{end}}
+                  <div class="row">
+                    <div class="act" style="margin-bottom:8px">
+                      <button type="button" class="btn sm regeo-btn"
+                              title="用上面填的经纬度重新反查省市区与街道，填进下面的框里。坐标改对之后地址要跟着刷，否则两者会差好几百米。">按坐标刷新地址</button>
+                    </div>
+                    <div class="regeo-hint card-sub" style="flex:2 1 260px;margin:0 0 8px"></div>
+                  </div>
+                  <div class="row">
+                    <label class="f" style="flex:1 1 110px"><span>省份</span><input type="text" name="province" value="{{.Province}}"></label>
+                    <label class="f" style="flex:1 1 110px"><span>城市</span><input type="text" name="city" value="{{.City}}"></label>
+                    <label class="f" style="flex:1 1 110px"><span>区县</span><input type="text" name="district" value="{{.District}}"></label>
+                    <label class="f" style="flex:1 1 130px"><span>街道</span><input type="text" name="thoroughfare" value="{{.Thoroughfare}}"></label>
+                  </div>
+                  <div class="row">
+                    <label class="f" style="flex:1 1 120px"><span>坐标来源</span>
+                      <select name="coord_source" title="建这个点时坐标是怎么来的。留档只影响判断，不参与任何换算。">
+                        {{$p := .}}
+                        <option value="none"{{if not .CoordSource}} selected{{end}}>未记录</option>
+                        {{range $.PlaceSources}}<option value="{{.Value}}"{{if eq .Value $p.CoordSource}} selected{{end}}>{{.Label}}</option>{{end}}
+                      </select>
+                    </label>
+                    <label class="f" style="flex:1 1 120px"><span>坐标本身是</span>
+                      <select name="coord_sys" title="填在左边「纬度/经度」里的这个坐标属于哪个坐标系。照片导入会自己记，这里只用于事后订正。">
+                        <option value="none"{{if not .CoordSys}} selected{{end}}>未记录</option>
+                        <option value="wgs84"{{if eq .CoordSys "wgs84"}} selected{{end}}>WGS-84</option>
+                        <option value="gcj02"{{if eq .CoordSys "gcj02"}} selected{{end}}>GCJ-02</option>
+                      </select>
+                    </label>
+                    <input type="hidden" name="src_lat" value="{{if .HasSrcCoord}}{{.SrcLat.Float64}}{{end}}">
+                    <input type="hidden" name="src_lon" value="{{if .HasSrcCoord}}{{.SrcLon.Float64}}{{end}}">
+                  </div>
+                  {{if .HasSrcCoord}}<div class="card-sub" style="margin:0 0 8px">换算前的原始坐标：<span class="mono">{{printf "%.6f" .SrcLat.Float64}}, {{printf "%.6f" .SrcLon.Float64}}</span></div>{{end}}
+                  <button class="btn primary sm" type="submit">保存</button>
+                </form>
+              </details>
+              <form method="post" action="/admin/edit/place/delete" style="display:inline"
+                    onsubmit="return confirm('删除该地点会同时删除它名下的全部到访记录，且不可恢复。确认删除？')">
+                <input type="hidden" name="src_pk" value="{{.SrcPK}}">
+                <button class="btn sm danger" type="submit">删除</button>
+              </form>
+            </td>
+          </tr>
+        {{end}}
+        </tbody>
+      </table>
+    </div>
+    {{if gt .PageCount 1}}
+    <div class="pager">
+      {{if gt .PageNo 1}}<a href="{{$.PageLink "page" (sub .PageNo 1)}}">上一页</a>{{end}}
+      <span class="cur">第 {{.PageNo}} / {{.PageCount}} 页</span>
+      {{if lt .PageNo .PageCount}}<a href="{{$.PageLink "page" (add .PageNo 1)}}">下一页</a>{{end}}
+    </div>
+    {{end}}
+    {{else}}<div class="empty">没有匹配的地点</div>{{end}}
+  </div>
+
+  <div class="card" data-card="visits">
+    <h2>到访记录</h2>
+    <form method="get" action="/admin/edit" class="search-row" style="margin-top:6px">
+      <label class="f"><span>搜索</span><input type="text" name="vq" value="{{.VisitQuery}}" placeholder="地点 / 城市 / 备注 / 活动 / 日期 / #编号"></label>
+      <div class="act"><button class="btn" type="submit">搜索</button><a class="btn" href="/admin/edit{{if .Query}}?q={{.Query}}{{end}}">重置</a></div>
+    </form>
+    <div class="card-sub">共 {{num .VisitTotal}} 条{{if .VisitQuery}}（匹配「{{.VisitQuery}}」）{{end}}，按时间倒序。可修改时间 / 类型 / 备注，或删除。</div>
+    {{if .Visits}}
+    <div class="tw">
+      <table class="tb">
+        <thead><tr><th>时间</th><th>地点</th><th>类型</th><th>备注</th><th></th></tr></thead>
+        <tbody>
+        {{range .Visits}}
+          <tr>
+            <td class="muted mono">{{.ArrivalStr}}{{if .DepartureStr}}<br>→ {{.DepartureStr}}{{else}}<br><span class="muted">（未离开）</span>{{end}}</td>
+            <td><span class="muted mono">#{{.SrcPK}}</span> {{if .PlaceName}}{{.PlaceName}}{{else}}<span class="muted">—</span>{{end}}{{if .City}} <span class="muted">· {{.City}}</span>{{end}}</td>
+            <td class="muted">{{.ActivityName}}{{if .UserAdded}} <span class="tag">补录</span>{{end}}</td>
+            <td class="muted">{{.Emoji}}{{if .Remark}}{{.Remark}}{{end}}
+              <form method="post" action="/admin/edit/visit/bookmark" style="display:inline">
+                <input type="hidden" name="src_pk" value="{{.SrcPK}}">
+                <button class="star{{if .Bookmarked}} on{{end}}" type="submit"
+                        title="{{if .Bookmarked}}取消收藏{{else}}标记为收藏{{end}}">{{if .Bookmarked}}★{{else}}☆{{end}}</button>
+              </form>
+            </td>
+            <td style="white-space:nowrap">
+              <details class="inline-edit">
+                <summary class="btn sm">编辑</summary>
+                <form method="post" action="/admin/edit/visit/update" style="margin-top:8px;min-width:300px">
+                  <input type="hidden" name="src_pk" value="{{.SrcPK}}">
+                  <label class="f"><span>类型</span>
+                    <select name="activity_id">
+                      <option value="">（无）</option>
+                      {{$cur := .ActivityID}}
+                      {{range $.Activities}}<option value="{{.ID}}" {{if eq .ID $cur}}selected{{end}}>{{.Name}}</option>{{end}}
+                    </select>
+                  </label>
+                  <div class="row">
+                    <label class="f" style="flex:1 1 190px"><span>到达时间<b class="req">*</b></span><input type="datetime-local" name="arrival" value="{{.ArrivalStr}}" required></label>
+                    <label class="f" style="flex:1 1 190px"><span>离开时间</span><input type="datetime-local" name="departure" value="{{.DepartureStr}}"></label>
+                  </div>
+                  <div class="row">
+                    <label class="f" style="flex:2 1 180px"><span>备注</span><input type="text" name="remark" value="{{.Remark}}"></label>
+                    <label class="f" style="flex:1 1 90px"><span>表情</span><input type="text" name="emoji" value="{{.Emoji}}"></label>
+                  </div>
+                  <label class="check"><input type="checkbox" name="bookmarked" {{if .Bookmarked}}checked{{end}}> 收藏</label>
+                  <button class="btn primary sm" type="submit">保存</button>
+                </form>
+              </details>
+              <form method="post" action="/admin/edit/visit/delete" style="display:inline"
+                    onsubmit="return confirm('删除这条到访记录？')">
+                <input type="hidden" name="src_pk" value="{{.SrcPK}}">
+                <button class="btn sm danger" type="submit">删除</button>
+              </form>
+            </td>
+          </tr>
+        {{end}}
+        </tbody>
+      </table>
+    </div>
+    {{if gt .VisitPageCount 1}}
+    <div class="pager">
+      {{if gt .VisitPageNo 1}}<a href="{{$.PageLink "vpage" (sub .VisitPageNo 1)}}">上一页</a>{{end}}
+      <span class="cur">第 {{.VisitPageNo}} / {{.VisitPageCount}} 页</span>
+      {{if lt .VisitPageNo .VisitPageCount}}<a href="{{$.PageLink "vpage" (add .VisitPageNo 1)}}">下一页</a>{{end}}
+    </div>
+    {{end}}
+    {{else}}<div class="empty">还没有到访记录</div>{{end}}
+  </div>
+
+  <div class="card" data-card="movements">
+    <h2>行程记录</h2>
+    <form method="get" action="/admin/edit" class="filter-row" style="margin-top:6px">
+      {{if .Query}}<input type="hidden" name="q" value="{{.Query}}">{{end}}
+      {{if .VisitQuery}}<input type="hidden" name="vq" value="{{.VisitQuery}}">{{end}}
+      <label class="f" style="flex:0 1 150px"><span>交通方式</span>
+        <select name="mt">
+          <option value="">全部</option>
+          <option value="none"{{if eq .MovementFilter.Transport "none"}} selected{{end}}>（无方式）</option>
+          {{$cur := .MovementFilter.Transport}}{{range .Transports}}<option value="{{.SrcPK}}"{{if eq (printf "%d" .SrcPK) $cur}} selected{{end}}>{{.Label}}（{{.Count}} 段）</option>{{end}}
+        </select>
+      </label>
+      <label class="f" style="flex:1 1 200px"><span>地点（起或止）</span>
+        <select name="mp">
+          <option value="">全部</option>
+          {{$p := .MovementFilter.PlaceID}}{{range .PlaceOptions}}<option value="{{.ID}}"{{if eq .ID $p}} selected{{end}}>{{.Label}}</option>{{end}}
+        </select>
+      </label>
+      <label class="f" style="flex:0 1 150px"><span>开始时间从</span><input type="date" name="mfrom" value="{{.MovementFilter.From}}"></label>
+      <label class="f" style="flex:0 1 150px"><span>到</span><input type="date" name="mto" value="{{.MovementFilter.To}}"></label>
+      <div class="act">
+        <button class="btn" type="submit">筛选</button>
+        <a class="btn" href="/admin/edit{{if .Query}}?q={{.Query}}{{end}}">重置</a>
+      </div>
+    </form>
+    <div class="card-sub">共 {{num .MovementTotal}} 段行程{{if or .MovementFilter.Transport .MovementFilter.PlaceID .MovementFilter.From .MovementFilter.To}}（已筛选）{{end}}，按开始时间倒序。可改起止、方式与时间区间，或删除。</div>
+    {{if .Movements}}
+    <div class="tw">
+      <table class="tb">
+        <thead><tr><th>时间</th><th>路线</th><th>方式</th><th class="num">里程</th><th></th></tr></thead>
+        <tbody>
+        {{range .Movements}}
+          <tr>
+            <td class="muted mono">{{if .Span}}{{.Span}}{{else}}（无时间）{{end}}
+              {{if .DurationMin}}<br><span class="muted">{{dur .DurationMin}}</span>{{end}}</td>
+            <td class="mv-route" title="{{.FromLabel}}{{if .FromCity}} · {{.FromCity}}{{end}} → {{.ToLabel}}{{if .ToCity}} · {{.ToCity}}{{end}}">{{.FromLabel}}<span class="mv-city">{{if .FromCity}} · {{.FromCity}}{{end}}</span><br><span class="muted">→ {{.ToLabel}}<span class="mv-city">{{if .ToCity}} · {{.ToCity}}{{end}}</span></span></td>
+            <td class="muted">{{if .TransportName}}<span class="dot" style="display:inline-block;background:{{colorof .TransportColor}}"></span> {{.TransportName}} <span class="muted mono">#{{.TransportSrc}}</span>{{else}}（无方式）{{end}}</td>
+            <td class="num">{{if .DistanceKm}}{{km .DistanceKm}}{{else}}—{{end}}</td>
+            <td style="white-space:nowrap">
+              <details class="inline-edit">
+                <summary class="btn sm">编辑</summary>
+                <form method="post" action="/admin/edit/movement/update" style="margin-top:8px;min-width:320px">
+                  <input type="hidden" name="src_pk" value="{{.SrcPK}}">
+                  <div class="row">
+                    <label class="f" style="flex:1 1 210px"><span>起始到访<b class="req">*</b></span>
+                      <div class="picker" data-source="visit-options">
+                        <input type="text" class="picker-input" placeholder="{{.FromLabel}}" autocomplete="off">
+                        <input type="hidden" name="from_visit" value="{{.FromSrc}}">
+                        <div class="picker-picked" style="display:none;margin:4px 0 0">
+                          已选：<b class="picker-picked-label"></b>
+                          <a href="javascript:void(0)" class="picker-clear" style="margin-left:6px">重选</a>
+                        </div>
+                        <div class="picker-results geo-list" style="display:none;max-height:200px"></div>
+                      </div>
+                    </label>
+                    <label class="f" style="flex:1 1 210px"><span>结束到访<b class="req">*</b></span>
+                      <div class="picker" data-source="visit-options">
+                        <input type="text" class="picker-input" placeholder="{{.ToLabel}}" autocomplete="off">
+                        <input type="hidden" name="to_visit" value="{{.ToSrc}}">
+                        <div class="picker-picked" style="display:none;margin:4px 0 0">
+                          已选：<b class="picker-picked-label"></b>
+                          <a href="javascript:void(0)" class="picker-clear" style="margin-left:6px">重选</a>
+                        </div>
+                        <div class="picker-results geo-list" style="display:none;max-height:200px"></div>
+                      </div>
+                    </label>
+                  </div>
+                  <div class="row">
+                    <label class="f" style="flex:1 1 190px"><span>开始时间</span><input type="datetime-local" name="start" value="{{.StartStr}}"></label>
+                    <label class="f" style="flex:1 1 190px"><span>结束时间</span><input type="datetime-local" name="end" value="{{.EndStr}}"></label>
+                  </div>
+                  <div class="row">
+                    <label class="f" style="flex:1 1 130px"><span>交通方式</span>
+                      <select name="transport_src" class="tsel">
+                        <option value="">（无）</option>
+                        {{$cur := .TransportSrc}}{{range $.Transports}}<option value="{{.SrcPK}}"{{if eq .SrcPK $cur}} selected{{end}} data-name="{{.Name}}" data-color="{{.Color}}" data-icon="{{.Icon}}">{{.Label}}</option>{{end}}
+                        <option value="__new__">新建方式…</option>
+                      </select>
+                    </label>
+                    <label class="f" style="flex:1 1 120px"><span>方式名称</span><input type="text" name="transport_name" value="{{.TransportName}}"></label>
+                    <label class="f" style="flex:1 1 100px"><span>颜色</span>
+                      <select name="transport_color">{{template "coloropts" dict "colors" $.TransportColors "cur" .TransportColor}}</select>
+                    </label>
+                  </div>
+                  <input type="hidden" name="transport_icon" value="">
+                  <button class="btn primary sm" type="submit">保存</button>
+                </form>
+              </details>
+              <form method="post" action="/admin/edit/movement/delete" style="display:inline"
+                    onsubmit="return confirm('删除这段行程？\n只删位移记录，两端的到访保留。')">
+                <input type="hidden" name="src_pk" value="{{.SrcPK}}">
+                <button class="btn sm danger" type="submit">删除</button>
+              </form>
+            </td>
+          </tr>
+        {{end}}
+        </tbody>
+      </table>
+    </div>
+    {{if gt .MovementPageCount 1}}
+    <div class="pager">
+      {{if gt .MovementPageNo 1}}<a href="{{$.PageLink "mpage" (sub .MovementPageNo 1)}}">上一页</a>{{end}}
+      <span class="cur">第 {{.MovementPageNo}} / {{.MovementPageCount}} 页</span>
+      {{if lt .MovementPageNo .MovementPageCount}}<a href="{{$.PageLink "mpage" (add .MovementPageNo 1)}}">下一页</a>{{end}}
+    </div>
+    {{end}}
+    {{else}}<div class="empty">还没有行程记录</div>{{end}}
+  </div>
+
+  <div class="card" data-card="movement-new">
+    <h2>新增行程</h2>
+    <div class="card-sub">补录两点之间的位移。起止选对应的到访记录（按名称 / 日期 / #编号 搜索）；时间留空则按两端到访自动推断：开始=起点离开时间、结束=终点到达时间。</div>
+    <form method="post" action="/admin/edit/movement">
+      <div class="req-tip"><b class="req">*</b>起始到访、结束到访必填</div>
+      <div class="row">
+        <label class="f" style="flex:1 1 260px"><span>起始到访<b class="req">*</b></span>
+          <div class="picker" data-source="visit-options">
+            <input type="text" class="picker-input" placeholder="搜索到访（名称 / 日期 / #编号）" autocomplete="off">
+            <input type="hidden" name="from_visit">
+            <div class="picker-picked" style="display:none;margin:4px 0 0">
+              已选：<b class="picker-picked-label"></b>
+              <a href="javascript:void(0)" class="picker-clear" style="margin-left:6px">重选</a>
+            </div>
+            <div class="picker-results geo-list" style="display:none;max-height:200px"></div>
+          </div>
+        </label>
+        <label class="f" style="flex:1 1 260px"><span>结束到访<b class="req">*</b></span>
+          <div class="picker" data-source="visit-options">
+            <input type="text" class="picker-input" placeholder="搜索到访（名称 / 日期 / #编号）" autocomplete="off">
+            <input type="hidden" name="to_visit">
+            <div class="picker-picked" style="display:none;margin:4px 0 0">
+              已选：<b class="picker-picked-label"></b>
+              <a href="javascript:void(0)" class="picker-clear" style="margin-left:6px">重选</a>
+            </div>
+            <div class="picker-results geo-list" style="display:none;max-height:200px"></div>
+          </div>
+        </label>
+      </div>
+      <div class="row">
+        <label class="f" style="flex:1 1 190px"><span>开始时间</span><input type="datetime-local" name="start"></label>
+        <label class="f" style="flex:1 1 190px"><span>结束时间</span><input type="datetime-local" name="end"></label>
+        <label class="f" style="flex:1 1 150px"><span>交通方式</span>
+          <select name="transport_src" class="tsel">
+            <option value="">（无）</option>
+            {{range .Transports}}<option value="{{.SrcPK}}" data-name="{{.Name}}" data-color="{{.Color}}" data-icon="{{.Icon}}">{{.Label}}（{{.Count}} 段）</option>{{end}}
+            <option value="__new__">新建方式…</option>
+          </select>
+        </label>
+      </div>
+      <div class="row">
+        <label class="f" style="flex:1 1 150px"><span>方式名称</span><input type="text" name="transport_name" placeholder="留空=沿用"></label>
+        <label class="f" style="flex:1 1 120px"><span>颜色</span>
+          <select name="transport_color">{{template "coloropts" dict "colors" .TransportColors "cur" ""}}</select>
+        </label>
+        <label class="f" style="flex:1 1 150px"><span>图标</span><input type="text" name="transport_icon" placeholder="如 moped.fill / 🚌"></label>
+      </div>
+      <div class="card-sub" style="margin:2px 0 8px">方式名称 / 颜色 / 图标改动会作用到<b>所有</b>使用该方式的行程——rond 里交通方式是一份全局列表，改名即整体改名。</div>
+      <button class="btn primary" type="submit">新增行程</button>
+    </form>
+  </div>
+
+  <div class="card" data-card="weather-new">
+    <h2>新增天气</h2>
+    <div class="card-sub">补录逐小时天气。关联到访可留空。</div>
+    <form method="post" action="/admin/edit/weather">
+      <div class="req-tip"><b class="req">*</b>时间必填</div>
+      <div class="row">
+        <label class="f" style="flex:1 1 200px"><span>时间<b class="req">*</b></span><input type="datetime-local" name="at" required></label>
+        <label class="f" style="flex:1 1 260px"><span>关联到访</span>
+          <div class="picker" data-source="visit-options">
+            <input type="text" class="picker-input" placeholder="可留空；搜索到访（名称 / 日期 / #编号）" autocomplete="off">
+            <input type="hidden" name="visit_src">
+            <div class="picker-picked" style="display:none;margin:4px 0 0">
+              已选：<b class="picker-picked-label"></b>
+              <a href="javascript:void(0)" class="picker-clear" style="margin-left:6px">重选</a>
+            </div>
+            <div class="picker-results geo-list" style="display:none;max-height:200px"></div>
+          </div>
+        </label>
+        <label class="f" style="flex:1 1 120px"><span>气温 ℃</span><input type="text" name="temperature_c"></label>
+      </div>
+      <div class="row">
+        <label class="f" style="flex:2 1 200px"><span>天气现象</span><input type="text" name="condition" placeholder="如 晴"></label>
+        <label class="f" style="flex:1 1 150px"><span>图标符号</span><input type="text" name="symbol" placeholder="可选"></label>
+      </div>
+      <button class="btn primary" type="submit">新增天气</button>
+    </form>
+  </div>
+  {{end}}
+</div>
+
+<script>
+// 卡片折叠：这页六张卡片全展开太长了，每张给个折叠按钮，状态记在本地。
+// 放在这里（内容之后、下面的初始化之前）同步执行，避免折叠状态晚一步才生效。
+(function () {
+  var KEY = 'rond-edit-fold';
+  var state = {};
+  try { state = JSON.parse(localStorage.getItem(KEY) || '{}') || {}; } catch (e) { state = {}; }
+
+  function save() {
+    try { localStorage.setItem(KEY, JSON.stringify(state)); } catch (e) { /* 隐私模式等，忽略 */ }
+  }
+
+  function apply(card, collapsed) {
+    card.classList.toggle('collapsed', collapsed);
+    var head = card.querySelector('h2');
+    var btn = card.querySelector('.card-toggle');
+    if (btn) {
+      btn.textContent = collapsed ? '▸' : '▾';
+      btn.setAttribute('aria-expanded', String(!collapsed));
+      btn.title = collapsed ? '展开' : '折叠';
+    }
+    if (head) head.title = collapsed ? '点击展开' : '点击折叠';
+    // 选点地图在 display:none 的容器里初始化会拿到 0 尺寸（一片空白）：
+    // 折叠状态下还没建过就先建，建过就补一次尺寸重算
+    var m = collapsed ? null : card.querySelector('#picker-map');
+    if (m) {
+      if (!m.classList.contains('leaflet-container') && window.__pickerMapInit) window.__pickerMapInit();
+      setTimeout(function () { window.dispatchEvent(new Event('resize')); }, 0);
+    }
+  }
+
+  var cards = [];
+  Array.prototype.forEach.call(document.querySelectorAll('.card[data-card]'), function (card) {
+    var head = card.querySelector('h2');
+    if (!head) return;
+    cards.push(card);
+    if (card.querySelector('.card-body')) return; // 装过了（脚本被重复执行），只补状态
+    // h2 之后的内容整体搬进 .card-body：折叠只藏它，标题与按钮始终在
+    var body = document.createElement('div');
+    body.className = 'card-body';
+    var node = head.nextSibling;
+    while (node) {
+      var next = node.nextSibling;
+      body.appendChild(node);
+      node = next;
+    }
+    card.appendChild(body);
+
+    var btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'card-toggle';
+    btn.addEventListener('click', function (e) {
+      e.stopPropagation();
+      show(card, !card.classList.contains('collapsed'));
+    });
+    head.addEventListener('click', function (e) {
+      if (e.target === btn) return;
+      show(card, !card.classList.contains('collapsed'));
+    });
+    head.appendChild(btn);
+  });
+  // 状态统一在这里落地：与上面的「装按钮/包 body」分开，重复执行也能对齐。
+  // 默认折叠——这页六张卡片全展开太长，只有明确记过「展开」的才展开。
+  cards.forEach(function (card) { apply(card, state[card.dataset.card] !== false); });
+
+  function show(card, collapsed) {
+    apply(card, collapsed);
+    state[card.dataset.card] = collapsed;
+    save();
+    syncAll();
+  }
+
+  var all = document.getElementById('fold-all');
+  function syncAll() {
+    if (!all) return;
+    var open = cards.filter(function (c) { return !c.classList.contains('collapsed'); }).length;
+    all.textContent = open === 0 ? '全部展开' : '全部折叠';
+  }
+  if (all) {
+    all.addEventListener('click', function () {
+      var collapse = cards.some(function (c) { return !c.classList.contains('collapsed'); });
+      cards.forEach(function (c) { apply(c, collapse); state[c.dataset.card] = collapse; });
+      save();
+      syncAll();
+    });
+    syncAll();
+  }
+})();
+</script>
+
+{{if .OpenSrcPK}}
+<script>
+// 从地点详情页跳进来（?open=<src_pk>）：把目标行滚到眼前。
+// 卡片默认是折叠的，这一行根本不可见，所以先借页面的折叠逻辑展开它（状态也会记住）。
+(function () {
+  var row = document.getElementById('place-row-{{.OpenSrcPK}}');
+  if (!row) return;
+  var card = row.closest('.card');
+  if (card && card.classList.contains('collapsed')) {
+    var head = card.querySelector('h2');
+    if (head) head.click();
+  }
+  requestAnimationFrame(function () { row.scrollIntoView({ block: 'center' }); });
+})();
+</script>
+{{end}}
+
+<script>
+(function () {
+  // Leaflet 由 layout 在 content 之后引入，脚本执行时 window.L 还没有，
+  // 必须等 load 事件（所有阻塞脚本就绪）后再初始化，否则地图整个不出现
+  function whenReady(cb) {
+    if (document.readyState === 'complete') { setTimeout(cb, 0); return; }
+    window.addEventListener('load', cb);
+  }
+
+  whenReady(function () {
+    // 原生 datetime-local 在桌面端交互差（上下键调分钟、不能直接键入），
+    // 统一换 flatpickr：中文、24 小时制、可直接手输。提交格式必须仍是
+    // datetime-local 的 "YYYY-MM-DDTHH:MM"，否则服务端解析不到。
+    // 注意 l10n 对象叫 flatpickr.l10ns（复数）；且必须 try 住——这里抛错会把
+    // 同一回调里后面的地图和地点搜索初始化一起炸掉。
+    try {
+      if (window.flatpickr) {
+        if (flatpickr.l10ns && flatpickr.l10ns.zh) flatpickr.localize(flatpickr.l10ns.zh);
+        document.querySelectorAll('input[type=datetime-local]').forEach(function (el) {
+          flatpickr(el, {
+            enableTime: true,
+            time_24hr: true,
+            allowInput: true,
+            // 补录靠回忆，没人记得 12:59:47——5 分钟步进贴合「大概那个点」的精度
+            minuteIncrement: 5,
+            dateFormat: 'Y-m-dTH:i'
+          });
+        });
+      }
+    } catch (e) { console.error('flatpickr 初始化失败', e); }
+
+    // 融合表单的模式切换。required 不能写在 name/lat 等字段上——切到
+    // 「补已有地点」时它们虽被隐藏，HTML5 仍会校验并拦住提交，所以校验交给后端。
+    var modeNew = document.querySelector('input[name=mode][value=new]');
+    var modeExisting = document.querySelector('input[name=mode][value=existing]');
+    function syncMode() {
+      if (!modeNew) return;
+      var isNew = modeNew.checked;
+      document.getElementById('mode-new').style.display = isNew ? '' : 'none';
+      document.getElementById('mode-existing').style.display = isNew ? 'none' : '';
+      // Leaflet 在 display:none 容器里初始化会拿到 0 尺寸，切回来时补一次重算
+      if (isNew) window.dispatchEvent(new Event('resize'));
+    }
+    if (modeNew && modeExisting) {
+      modeNew.addEventListener('change', syncMode);
+      modeExisting.addEventListener('change', syncMode);
+    }
+
+    // ---------- 可搜索选择器（地点 / 到访端点都给原生下拉没法用） ----------
+    // 数据从隐藏 select 读：内联 JSON 会被模板的 JS 上下文转义搞坏
+    function initPickers() {
+      document.querySelectorAll('.picker').forEach(function (p) {
+        var src = document.getElementById(p.dataset.source);
+        if (!src) return;
+        var items = [];
+        Array.prototype.forEach.call(src.options, function (o) {
+          items.push({ id: o.value, label: o.textContent });
+        });
+        var input = p.querySelector('.picker-input');
+        var hidden = p.querySelector('input[type=hidden]');
+        var pickedBox = p.querySelector('.picker-picked');
+        var pickedLabel = p.querySelector('.picker-picked-label');
+        var results = p.querySelector('.picker-results');
+        var clearBtn = p.querySelector('.picker-clear');
+
+        function close() {
+          results.style.display = 'none';
+          results.innerHTML = '';
+        }
+        function pick(it) {
+          hidden.value = it.id;
+          pickedLabel.textContent = it.label;
+          pickedBox.style.display = '';
+          input.style.display = 'none';
+          close();
+        }
+        function render(kw) {
+          kw = kw.trim().toLowerCase();
+          var hits = items.filter(function (it) {
+            return !kw || it.label.toLowerCase().indexOf(kw) >= 0;
+          }).slice(0, 30);
+          results.innerHTML = '';
+          hits.forEach(function (it) {
+            var btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = 'geo-item';
+            btn.textContent = it.label;
+            btn.addEventListener('click', function () { pick(it); });
+            results.appendChild(btn);
+          });
+          results.style.display = hits.length ? '' : 'none';
+        }
+        input.addEventListener('focus', function () { render(input.value); });
+        input.addEventListener('input', function () { render(input.value); });
+        input.addEventListener('blur', function () {
+          // 延后一点再收：否则点选项时的 blur 会先把列表拆了，点击落空
+          setTimeout(close, 150);
+        });
+        clearBtn.addEventListener('click', function () {
+          hidden.value = '';
+          pickedBox.style.display = 'none';
+          input.style.display = '';
+          input.value = '';
+          input.focus();
+        });
+        // 行内编辑的表单里隐藏域已经带了当前值：直接显示成「已选：… + 重选」。
+        // 不这么做的话用户看不到当前选的是哪条，也没地方清空重选。
+        if (hidden.value) {
+          for (var i = 0; i < items.length; i++) {
+            if (items[i].id === hidden.value) { pick(items[i]); break; }
+          }
+        }
+      });
+    }
+    initPickers();
+    // 点空白处 / 按 Esc 收回下拉（页面里几十个 picker，监听挂一次就够）
+    function closeAllPickers(except) {
+      document.querySelectorAll('.picker').forEach(function (p) {
+        if (except && p.contains(except)) return;
+        var r = p.querySelector('.picker-results');
+        if (r) { r.style.display = 'none'; r.innerHTML = ''; }
+      });
+    }
+    document.addEventListener('click', function (e) { closeAllPickers(e.target); });
+    document.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape') closeAllPickers(null);
+    });
+
+    // ---------- 交通方式：方式名称 / 颜色 / 图标跟着下拉走 ----------
+    // 这三个字段是给「改名 / 换色 / 换图标」用的：选中已有方式时预填它的当前值，
+    // 提交时留空表示沿用（服务端这么解释），所以清空不会把方式变成无名模式。
+    function syncTransportFields(sel) {
+      var form = sel.form || sel.closest('form');
+      if (!form) return;
+      var name = form.querySelector('[name=transport_name]');
+      var color = form.querySelector('[name=transport_color]');
+      var icon = form.querySelector('[name=transport_icon]');
+      if (!name) return;
+      var opt = sel.options[sel.selectedIndex];
+      var isNew = sel.value === '__new__';
+      var none = sel.value === '';
+      [name, color, icon].forEach(function (el) { if (el) el.disabled = none; });
+      if (none) {
+        name.value = '';
+        if (color) color.value = '';
+        if (icon) icon.value = '';
+        return;
+      }
+      name.value = isNew ? '' : ((opt && opt.dataset.name) || '');
+      if (color) color.value = isNew ? '' : ((opt && opt.dataset.color) || '');
+      if (icon) icon.value = isNew ? '' : ((opt && opt.dataset.icon) || '');
+      name.placeholder = isNew ? '必填，如 共享单车' : '留空=沿用';
+    }
+    document.querySelectorAll('select.tsel').forEach(function (sel) {
+      syncTransportFields(sel);
+      sel.addEventListener('change', function () { syncTransportFields(sel); });
+    });
+
+    // ---------- 坐标换算：换完直接写进经纬度框，并把前后变化摆出来 ----------
+    // 换算在服务端做（geo 包是唯一实现），这里只管显示与回填。
+    // 换算同时要修正「坐标来源留档」：换算后的经纬度框里是 GCJ-02，而原始坐标是换算前那一份，
+    // 所以顺带把 coord_sys 设成来源坐标系、src_lat/src_lon 填成换算前的值——
+    // 留档与显示坐标于是永远对得上（显示坐标 == 按 coord_sys 换算原始坐标）。
+    document.querySelectorAll('.coord-sel').forEach(function (sel) {
+      var form = sel.form || sel.closest('form');
+      var latI = form.querySelector('[name=lat]'), lonI = form.querySelector('[name=lon]');
+      var diff = form.querySelector('.coord-diff');
+      var sysI = form.querySelector('[name=coord_sys]');
+      var srcLatI = form.querySelector('[name=src_lat]'), srcLonI = form.querySelector('[name=src_lon]');
+      // base 是「还没换算之前」的坐标：换向要基于它，来回切不会越换越偏
+      var base = { lat: latI.value, lon: lonI.value };
+      var keep = { sys: sysI ? sysI.value : '',
+                   srcLat: srcLatI ? srcLatI.value : '', srcLon: srcLonI ? srcLonI.value : '' };
+      var lastMode = '';
+      sel.addEventListener('change', function () {
+        var mode = sel.value;
+        if (!mode) {
+          latI.value = base.lat;
+          lonI.value = base.lon;
+          if (sysI) sysI.value = keep.sys;
+          if (srcLatI) srcLatI.value = keep.srcLat;
+          if (srcLonI) srcLonI.value = keep.srcLon;
+          diff.textContent = '';
+          lastMode = '';
+          return;
+        }
+        if (lastMode === '') base = { lat: latI.value, lon: lonI.value };
+        lastMode = mode;
+        diff.textContent = '换算中…';
+        fetch('/api/coords?mode=' + mode + '&lat=' + encodeURIComponent(base.lat) + '&lon=' + encodeURIComponent(base.lon),
+              { headers: { 'Accept': 'application/json' } })
+          .then(function (r) { return r.json(); })
+          .then(function (d) {
+            if (d.error) { diff.textContent = d.error; return; }
+            latI.value = d.lat.toFixed(6);
+            lonI.value = d.lon.toFixed(6);
+            // wgs2gcj 说明原来的值是 WGS-84，留档记 wgs84；反过来记 gcj02
+            if (sysI) sysI.value = mode === 'wgs2gcj' ? 'wgs84' : 'gcj02';
+            if (srcLatI) srcLatI.value = base.lat;
+            if (srcLonI) srcLonI.value = base.lon;
+            var from = mode === 'wgs2gcj' ? 'WGS-84' : 'GCJ-02';
+            var to = mode === 'wgs2gcj' ? 'GCJ-02' : 'WGS-84';
+            diff.innerHTML = from + ' <span class="mono">' + base.lat + ', ' + base.lon + '</span>'
+              + ' → ' + to + ' <b class="mono">' + latI.value + ', ' + lonI.value + '</b>'
+              + ' <span class="muted">（移动 ' + d.dist_m + ' 米 · 往' + d.bearing + '）</span>'
+              + '<br><span class="muted">原始坐标会记进留档（' + from + '）</span>';
+          })
+          .catch(function () { diff.textContent = '换算失败，请重试'; });
+      });
+    });
+
+    // ---------- 按坐标刷新地址：坐标改对了，省市区/街道还是按旧坐标反查来的 ----------
+    // 反查交给服务端（/api/regeo），这里是 GCJ-02，与库内坐标同系，不用再换算。
+    document.querySelectorAll('.regeo-btn').forEach(function (btn) {
+      var form = btn.closest('form');
+      var hint = form.querySelector('.regeo-hint');
+      btn.addEventListener('click', function () {
+        var lat = form.querySelector('[name=lat]').value;
+        var lon = form.querySelector('[name=lon]').value;
+        if (!lat || !lon) { hint.textContent = '先填经纬度'; return; }
+        hint.textContent = '反查中…';
+        btn.disabled = true;
+        fetch('/api/regeo', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+          body: JSON.stringify({ coord: 'gcj02', points: [{ lat: parseFloat(lat), lon: parseFloat(lon), key: 'r' }] })
+        })
+          .then(function (r) { return r.json(); })
+          .then(function (d) {
+            var it = d.items && d.items[0];
+            if (!it) { hint.textContent = d.error || '反查没有结果'; return; }
+            // 只填反查给出的字段，空的保留原值——反查失败不该把已有地址清空。
+            // 接口给的是 street/township（高德有时只给乡镇），表单里的框叫 thoroughfare。
+            var fill = { province: it.province, city: it.city, district: it.district,
+                         thoroughfare: it.street || it.township };
+            Object.keys(fill).forEach(function (k) {
+              var el = form.querySelector('[name=' + k + ']');
+              if (el && fill[k]) el.value = fill[k];
+            });
+            hint.textContent = (it.address || '（无地址）')
+              + (it.poi ? '　最近：' + it.poi + (it.poiDist ? '（' + Math.round(it.poiDist) + ' 米）' : '') : '')
+              + '　— 已填入下面的框，点「保存」生效';
+          })
+          .catch(function () { hint.textContent = '反查失败，请重试'; })
+          .finally(function () { btn.disabled = false; });
+      });
+    });
+
+    // ---------- 时间区间 → 实时算时长 ----------
+    // 时长不是独立字段（导出回 rond 只有 ZSTART_/ZEND_），这里只是让填的时候看得见
+    function fmtMin(m) {
+      m = Math.round(m);
+      if (m < 60) return m + ' 分钟';
+      var h = Math.floor(m / 60), r = m % 60;
+      return r ? h + ' 小时 ' + r + ' 分钟' : h + ' 小时';
+    }
+    document.querySelectorAll('form[action="/admin/edit/movement"], form[action="/admin/edit/movement/update"]')
+      .forEach(function (f) {
+        var s = f.querySelector('[name=start]'), e = f.querySelector('[name=end]');
+        if (!s || !e) return;
+        var hint = document.createElement('div');
+        hint.className = 'card-sub';
+        hint.style.margin = '2px 0 0';
+        e.parentNode.appendChild(hint);
+        function upd() {
+          if (!s.value || !e.value) { hint.textContent = '时间留空则按两端到访自动推断'; return; }
+          var d = (new Date(e.value) - new Date(s.value)) / 60000;
+          if (!isFinite(d)) { hint.textContent = ''; return; }
+          hint.textContent = d > 0 ? '时长 ' + fmtMin(d) : '结束时间必须晚于开始时间';
+        }
+        ['change', 'input', 'blur', 'focusout'].forEach(function (ev) {
+          s.addEventListener(ev, upd);
+          e.addEventListener(ev, upd);
+        });
+        upd();
+      });
+
+    // ---------- 活动内联新建：创建后即时挂进下拉并选中 ----------
+    function addActivity() {
+      var input = document.getElementById('new-activity-name');
+      var name = input.value.trim();
+      if (!name) return;
+      fetch('/admin/edit/activity', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: 'name=' + encodeURIComponent(name)
+      }).then(function (r) { return r.json(); }).then(function (d) {
+        if (d.error) { alert(d.error); return; }
+        var sel = document.getElementById('activity-select');
+        var opt = document.createElement('option');
+        opt.value = d.id;
+        opt.textContent = d.name;
+        opt.selected = true;
+        sel.appendChild(opt);
+        input.value = '';
+      }).catch(function (e) { alert('创建活动失败：' + e); });
+    }
+    var actAdd = document.getElementById('activity-add');
+    if (actAdd) {
+      actAdd.addEventListener('click', addActivity);
+      document.getElementById('new-activity-name').addEventListener('keydown', function (e) {
+        if (e.key === 'Enter') { e.preventDefault(); addActivity(); }
+      });
+    }
+
+    // ---------- 活动改名 / 删除：作用于下拉里当前选中的那一个 ----------
+    function activityPost(path, body, onOK) {
+      fetch(path, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: body
+      }).then(function (r) { return r.json(); }).then(function (d) {
+        if (d.error) { alert(d.error); return; }
+        onOK(d);
+      }).catch(function (e) { alert('请求失败：' + e); });
+    }
+    var actSel = document.getElementById('activity-select');
+    var actRename = document.getElementById('activity-rename');
+    if (actSel && actRename) {
+      actRename.addEventListener('click', function () {
+        var opt = actSel.options[actSel.selectedIndex];
+        if (!actSel.value || !opt) { alert('请先在下拉里选择要改名的活动'); return; }
+        var name = window.prompt('新的活动名称', opt.textContent);
+        if (!name || !name.trim()) return;
+        activityPost('/admin/edit/activity/update',
+          'id=' + encodeURIComponent(actSel.value) + '&name=' + encodeURIComponent(name.trim()),
+          function (d) { opt.textContent = d.name; });
+      });
+      document.getElementById('activity-delete').addEventListener('click', function () {
+        var opt = actSel.options[actSel.selectedIndex];
+        if (!actSel.value || !opt) { alert('请先在下拉里选择要删除的活动'); return; }
+        if (!window.confirm('删除活动「' + opt.textContent + '」？\n引用它的到访会变成「未分类」，导出后 rond 里这些到访就没有活动了。')) return;
+        activityPost('/admin/edit/activity/delete', 'id=' + encodeURIComponent(actSel.value),
+          function () { actSel.removeChild(opt); actSel.value = ''; });
+      });
+    }
+
+    // ---------- 类别下拉：选到「自定义…」时就地展开输入框（含每行行内编辑） ----------
+    document.addEventListener('change', function (e) {
+      var t = e.target;
+      if (!t || !t.classList || !t.classList.contains('cat-select')) return;
+      var form = t.closest('form');
+      var wrap = form && form.querySelector('.cat-custom');
+      if (!wrap) return;
+      var custom = t.value === '__custom__';
+      wrap.style.display = custom ? '' : 'none';
+      var input = wrap.querySelector('input');
+      if (custom && input) input.focus();
+    });
+
+    var form = document.querySelector('form[action="/admin/edit/place"]');
+    var el = document.getElementById('picker-map');
+    var latInput = form && form.querySelector('[name=lat]');
+    var lonInput = form && form.querySelector('[name=lon]');
+    var mapGoto = function () {};   // 地图未就绪时的空操作，坐标照填不误
+
+    function fillCoord(lat, lon) {
+      if (latInput) latInput.value = lat.toFixed(6);
+      if (lonInput) lonInput.value = lon.toFixed(6);
+    }
+
+    // ---------- 地图选点 ----------
+    if (el && window.L && latInput && lonInput) {
+      // 底图走站点配置：带密钥的图层由服务端转发，免密钥的是浏览器直连的 {s} 模板，
+      // 这里不能硬写 /tiles/xxx 路由（免密钥时该路由不存在，会 404 导致地图空白）
+      var fallback = {
+        def: { url: 'https://webrd0{s}.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&x={x}&y={y}&z={z}', maxZoom: 18, attr: '© 高德地图' },
+        subs: ['1', '2', '3', '4']
+      };
+
+      var init = function (cfg) {
+        var def = cfg.def, map = L.map(el).setView([34.5, 108.9], 4), marker = null;
+        L.tileLayer(def.url, {
+          subdomains: cfg.subs,
+          maxZoom: def.maxZoom || 18,
+          minZoom: 3,
+          attribution: def.attr || ''
+        }).addTo(map);
+
+        mapGoto = function (lat, lon, zoom) {
+          if (marker) { marker.setLatLng([lat, lon]); } else { marker = L.marker([lat, lon]).addTo(map); }
+          if (zoom) map.setView([lat, lon], zoom);
+        };
+        map.on('click', function (e) { fillCoord(e.latlng.lat, e.latlng.lng); mapGoto(e.latlng.lat, e.latlng.lng, 0); });
+
+        var lat0 = parseFloat(latInput.value), lon0 = parseFloat(lonInput.value);
+        if (lat0 && lon0) mapGoto(lat0, lon0, 14);
+      };
+
+      var startMap = function () {
+        fetch('/api/map-config', { headers: { 'Accept': 'application/json' } })
+          .then(function (r) { return r.json(); })
+          .then(function (c) {
+            var def = (c && c.base && c.base.length) ? c.base[0] : fallback.def;
+            var subs = (c && c.subs && c.subs.length) ? c.subs : fallback.subs;
+            init({ def: def, subs: subs });
+          })
+          .catch(function () { init(fallback); });
+      };
+      // 这张卡片被折叠着就先别建：Leaflet 在 display:none 的容器里初始化会拿到 0 尺寸，
+      // 展开时上面的折叠脚本会回来调它
+      window.__pickerMapInit = startMap;
+      if (el.offsetParent !== null) startMap();
+    }
+
+    // ---------- 按名称搜索坐标（高德地理编码，服务端代理） ----------
+    var q = document.getElementById('geo-q'), go = document.getElementById('geo-go');
+    var list = document.getElementById('geo-list'), msg = document.getElementById('geo-msg');
+    if (!form || !q || !go || !list || !msg) return;
+
+    function setVal(name, v) {
+      if (!v) return;
+      var i = form.querySelector('[name=' + name + ']');
+      if (i && !i.value.trim()) i.value = v;
+    }
+
+    function search() {
+      var kw = q.value.trim();
+      if (!kw) { msg.textContent = '请输入要搜索的名称'; return; }
+      msg.textContent = '搜索中…';
+      list.textContent = '';
+      fetch('/api/geocode?q=' + encodeURIComponent(kw), { headers: { 'Accept': 'application/json' } })
+        .then(function (r) { return r.json(); })
+        .then(function (d) {
+          if (d && d.error) { msg.textContent = d.error; return; }
+          var items = (d && d.items) || [];
+          if (!items.length) { msg.textContent = '没有找到匹配的地点'; return; }
+          msg.textContent = '找到 ' + items.length + ' 个候选，点一个填入：';
+          items.forEach(function (it) {
+            var b = document.createElement('button');
+            b.type = 'button';
+            b.className = 'geo-item';
+            var nm = document.createElement('span');
+            nm.className = 'geo-name';
+            nm.textContent = it.name || it.address || '(无名)';
+            var ad = document.createElement('span');
+            ad.className = 'geo-addr';
+            var parts = [];
+            if (it.address && it.address !== it.name) parts.push(it.address);
+            parts.push(it.lat.toFixed(5) + ', ' + it.lon.toFixed(5));
+            ad.textContent = parts.join(' · ');
+            b.appendChild(nm); b.appendChild(ad);
+            b.addEventListener('click', function () {
+              var ni = form.querySelector('[name=name]');
+              if (ni && !ni.value.trim()) ni.value = it.name || '';
+              setVal('province', it.province); setVal('city', it.city); setVal('district', it.district);
+              fillCoord(it.lat, it.lon);
+              mapGoto(it.lat, it.lon, 15);
+              msg.textContent = '已填入：' + (it.name || it.address || '');
+              list.textContent = '';
+            });
+            list.appendChild(b);
+          });
+        })
+        .catch(function () { msg.textContent = '搜索失败，请稍后再试'; });
+    }
+
+    go.addEventListener('click', search);
+    q.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter') { e.preventDefault(); search(); }
+    });
+  });
+})();
+</script>
+{{end}}
+
+{{/* 交通方式的颜色下拉：rond 认的是系统色名，不是一个颜色选择器。
+     每行行内编辑都要一份，抽出来免得 40 行 × 13 个选项堆在模板里。 */}}
+{{define "coloropts"}}
+<option value="">（不指定）</option>
+{{$cur := .cur}}{{range $c := .colors}}<option value="{{$c}}"{{if eq $c $cur}} selected{{end}}>{{$c}}</option>{{end}}
+{{end}}

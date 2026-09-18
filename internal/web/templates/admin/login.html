@@ -1,0 +1,53 @@
+{{define "login"}}<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+{{/* viewport-fit=cover 才会把刘海屏 / 底部 Home 指示条的安全区通过 env() 暴露出来，否则 CSS 里的 safe-area-inset 全是 0 */}}
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>登录后台 · {{.Settings.SiteTitle}}</title>
+<link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
+<link rel="stylesheet" href="/static/css/app.css">
+<style>:root{--accent:{{.Settings.AccentColor}};--accent-soft:{{.Settings.AccentColor}}1a}</style>
+</head>
+<body>
+<div style="min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px">
+  <div style="width:100%;max-width:368px">
+    <div style="text-align:center;margin-bottom:22px">
+      <div style="font-size:30px">{{.Settings.OwnerAvatar}}</div>
+      <h1 style="font-size:19px;margin-top:6px">{{.Settings.SiteTitle}}</h1>
+      <div class="muted" style="font-size:13px">后台管理</div>
+    </div>
+
+    <div class="card" style="margin:0">
+      {{if .Err}}<div class="alert err">{{.Err}}</div>{{end}}
+      {{if .Flash}}<div class="alert info">{{.Flash}}</div>{{end}}
+      <form method="post" action="/admin/login">
+        <input type="hidden" name="next" value="{{.Next}}">
+        <label class="f"><span>用户名</span><input type="text" name="username" autocomplete="username" autofocus required></label>
+        <label class="f"><span>密码</span><input type="password" name="password" autocomplete="current-password" required></label>
+        <label class="f"><span>验证码</span>
+          {{/* 用 div 而不是 span：label.f > span 会把 display 压成 block，.row 的 flex 就失效了。
+               输入框要显式 width:auto —— 全局的 input[type=text]{width:100%} 会把图挤到下一行。 */}}
+          <div class="row" style="flex-wrap:nowrap;gap:8px">
+            <input type="text" name="captcha" inputmode="latin" autocomplete="off"
+                   spellcheck="false" maxlength="6" required style="flex:1 1 0;width:auto;min-width:0">
+            <img id="captcha-img" src="/captcha" alt="验证码" width="130" height="40"
+                 title="看不清？点击换一张"
+                 style="border:1px solid var(--line);border-radius:6px;cursor:pointer;flex:0 0 auto">
+          </div>
+        </label>
+        <button class="btn primary" type="submit" style="width:100%;justify-content:center">登录</button>
+      </form>
+      <script>
+        // 换一张：带上时间戳绕开缓存；服务端每次出图都会下发新的 id cookie
+        document.getElementById('captcha-img').addEventListener('click', function () {
+          this.src = '/captcha?t=' + Date.now();
+        });
+      </script>
+    </div>
+
+    <div style="text-align:center;margin-top:16px"><a class="muted" href="/" style="font-size:13px">← 返回主页</a></div>
+  </div>
+</div>
+</body>
+</html>{{end}}

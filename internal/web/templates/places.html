@@ -1,0 +1,84 @@
+{{define "content"}}
+<div class="wrap">
+  <div class="page-head">
+    <div>
+      <h1>地点库</h1>
+      <div class="sub">
+        共 {{num .Total}} 个地点 · {{.RangeLabel}}{{if .City}} · 城市：{{.City}}{{end}}{{if .Keyword}} · 关键词：{{.Keyword}}{{end}}
+      </div>
+    </div>
+  </div>
+
+  {{if not .HasData}}
+    {{template "emptystate" .}}
+  {{else}}
+    {{template "filters" .}}
+
+    <div class="card">
+      <div class="row" style="margin-bottom:12px">
+        <span class="muted" style="font-size:12.5px">排序</span>
+        <div class="chips">
+          <a class="chip {{if eq .Sort ""}}on{{end}}" href="{{.Link .FilterBase "sort" ""}}">到访次数</a>
+          <a class="chip {{if eq .Sort "dwell"}}on{{end}}" href="{{.Link .FilterBase "sort" "dwell"}}">停留时长</a>
+          <a class="chip {{if eq .Sort "recent"}}on{{end}}" href="{{.Link .FilterBase "sort" "recent"}}">最近到访</a>
+          <a class="chip {{if eq .Sort "first"}}on{{end}}" href="{{.Link .FilterBase "sort" "first"}}">首次到访</a>
+          <a class="chip {{if eq .Sort "name"}}on{{end}}" href="{{.Link .FilterBase "sort" "name"}}">名称</a>
+        </div>
+      </div>
+
+      {{if or .IsAdmin .Settings.MarksPublic}}
+      <div class="row" style="margin-bottom:12px">
+        <span class="muted" style="font-size:12.5px">标记</span>
+        <div class="chips">
+          <a class="chip {{if eq .Verdict 0}}on{{end}}" href="{{.VerdictLink 0}}">全部</a>
+          <a class="chip {{if eq .Verdict 1}}on{{end}}" href="{{.VerdictLink 1}}">👍 推荐</a>
+          <a class="chip {{if eq .Verdict -1}}on{{end}}" href="{{.VerdictLink -1}}">👎 踩雷</a>
+        </div>
+      </div>
+      {{end}}
+
+      {{if .Places}}
+      <div class="tw">
+        <table class="tb">
+          <thead>
+            <tr>
+              <th>地点</th><th>城市</th><th>主要类型</th>
+              <th class="num">到访</th><th class="num">累计停留</th>
+              <th>首次</th><th>最近</th>
+            </tr>
+          </thead>
+          <tbody>
+            {{range .Places}}
+            <tr>
+              <td>
+                <a href="/places/{{.ID}}">{{if .Name}}{{.Name}}{{else}}未命名地点{{end}}</a>
+                {{if .IsHome}}<span class="tag">家</span>{{end}}
+                {{if .IsWork}}<span class="tag">工作</span>{{end}}
+                {{if eq .Verdict 1}}<span class="tag vote-up">👍 推荐</span>{{else if eq .Verdict -1}}<span class="tag vote-down">👎 踩雷</span>{{end}}
+                {{if or .Up .Down}}<span class="muted" style="font-size:12px">👍{{.Up}} · 👎{{.Down}}</span>{{end}}
+              </td>
+              <td class="muted">{{if .City}}{{.City}}{{else}}—{{end}}</td>
+              <td>
+                {{if .TopActivity}}<span class="chip" style="padding:1px 8px"><span class="dot" style="background:{{colorof .TopColor}}"></span>{{.TopActivity}}</span>{{else}}<span class="muted">—</span>{{end}}
+              </td>
+              <td class="num">{{num .VisitCount}}</td>
+              <td class="num">{{dur .DwellMinutes}}</td>
+              <td class="muted">{{if .FirstAt}}{{d .FirstAt}}{{else}}—{{end}}</td>
+              <td class="muted">{{if .LastAt}}{{d .LastAt}}{{end}}</td>
+            </tr>
+            {{end}}
+          </tbody>
+        </table>
+      </div>
+      {{template "pager" .}}
+      {{else}}
+      <div class="empty">
+        <div class="big">🔍</div>
+        <div>没有符合条件的地点。</div>
+        <div style="margin-top:12px"><a class="btn" href="{{.FilterBase}}">清空筛选条件</a></div>
+      </div>
+      {{end}}
+    </div>
+  {{end}}
+</div>
+{{end}}

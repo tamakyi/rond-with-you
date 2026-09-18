@@ -1,0 +1,25 @@
+[Unit]
+Description=rond-with-you 足迹站点
+After=network-online.target postgresql.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=rond
+WorkingDirectory=/opt/rond-with-you
+ExecStart=/opt/rond-with-you/rond -c /opt/rond-with-you/conf/app.ini
+Restart=on-failure
+RestartSec=3
+# 初始管理员口令，仅首次启动时使用
+Environment=ROND_ADMIN_USER=admin
+Environment=ROND_ADMIN_PASSWORD=change-me-please
+
+# 限制
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/rond-with-you/storage
+
+[Install]
+WantedBy=multi-user.target

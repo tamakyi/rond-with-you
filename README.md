@@ -304,8 +304,3 @@ GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -trimpath -ldflags "-s -w" -o ron
 - 时间、坐标这类「原样回贴」的字段有讲究：表单精度（分钟 / 6 位小数）往往低于库里真值，
   保存时若与库里已有值落在同一精度上要沿用库里那份，否则只改个备注也会把时间或坐标悄悄改掉。
 - `tools/verify_rondbackup.py` 可以做导入→导出→逐表对账，检查改动有没有破坏备份保真度。
-
-## 后续可以做的
-
-- 多用户注册与权限（数据模型已按 `user_id` 分区，加个注册页即可）
-- 年度报告「长图」直接导出 PNG（目前用浏览器打印生成 PDF；如需像素级 PNG 可再接 html2canvas 一类库）

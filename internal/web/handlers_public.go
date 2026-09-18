@@ -497,17 +497,17 @@ func (s *Server) placePage(w http.ResponseWriter, r *http.Request) {
 	}
 	p.HasMap = true
 	if p.Dataset == nil {
-		http.NotFound(w, r)
+		s.notFoundPage(w, "这个地点不存在", "站点还没有导入任何数据，这一页自然也没有内容。")
 		return
 	}
 	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
 	if err != nil {
-		http.NotFound(w, r)
+		s.notFoundPage(w, "这个地址不对", "地点的编号应该是数字，链接可能被截断了。")
 		return
 	}
 	place, err := s.q.Place(r.Context(), p.Dataset.ID, id)
 	if err != nil {
-		http.NotFound(w, r)
+		s.notFoundPage(w, "这个地点不存在", "")
 		return
 	}
 	if regionHidden(p.Settings, p.IsAdmin(), place) {

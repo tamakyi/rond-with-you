@@ -1037,6 +1037,11 @@ func (s *Server) editVisitUpdate(w http.ResponseWriter, r *http.Request) {
 		s.serverError(w, r, err)
 		return
 	}
+	// 时间改动可能让引用这条到访的行程越界，就地夹回去（见 clampVisitMovements）
+	if err := s.clampVisitMovements(ctx, s.db, ds.ID, src); err != nil {
+		s.serverError(w, r, err)
+		return
+	}
 	s.saveVisitTags(ctx, s.db, ds.ID, src, r.PostForm["tags"])
 	if oldPlace > 0 {
 		s.refreshPlaceAgg(ctx, s.db, oldPlace)
@@ -1254,6 +1259,84 @@ func resolveMovementEnd(raw string, cur *time.Time, def time.Time, label string)
 	}
 	kept := keepStoredTime(t, cur)
 	return kept, kept.Equal(t), ""
+}
+
+// clampVisitMovements 把「引用这条到访」的行程夹回合法窗口。
+//
+// 真机不变量（判据同 movementWindow）：位移不早于起点到访的离开时间、不晚于终点到访的到达时间。
+// 但表单对手填时间有 1 分钟容差，而**改到访时间时不会回头校验引用它的行程** —— 把某次到访的
+// 到达时间改早之后，原先合法的行程就变成越界（实测有 2 条超出 26~47 秒，导出包里带着这个违例）。
+// 所以每次改到访时间后按两端到访的当前时间把行程夹回来。
+//
+// 夹不动的情况（窗口被压得比 1 分钟还窄）把结束时间推到开始之后 1 分钟：真机 791/791 条
+// ZSTART_/ZEND_ 都有值，宁可略微越界也不能写 NULL。
+func (s *Server) clampVisitMovements(ctx context.Context, ex execer, datasetID int64, visitSrcPK int) error {
+	rows, err := ex.QueryContext(ctx, `SELECT m.src_pk, m.started_at, m.ended_at,
+			fl.departure, fl.arrival, tl.arrival
+		FROM movements m
+		LEFT JOIN visits fl ON fl.dataset_id = m.dataset_id AND fl.src_pk = m.from_visit_src
+		LEFT JOIN visits tl ON tl.dataset_id = m.dataset_id AND tl.src_pk = m.to_visit_src
+		WHERE m.dataset_id = $1 AND (m.from_visit_src = $2 OR m.to_visit_src = $2)`,
+		datasetID, visitSrcPK)
+	if err != nil {
+		return err
+	}
+	type fix struct {
+		pk         int
+		start, end time.Time
+	}
+	var fixes []fix
+	for rows.Next() {
+		var pk int
+		var start, end time.Time
+		var fDep, fArr, tArr sql.NullTime
+		if err := rows.Scan(&pk, &start, &end, &fDep, &fArr, &tArr); err != nil {
+			rows.Close()
+			return err
+		}
+		// 起点侧的下界：有离开时间用离开，没有就用到达
+		lo := sql.NullTime{}
+		if fDep.Valid {
+			lo = fDep
+		} else {
+			lo = fArr
+		}
+		ns, ne := clampMovementWindow(start, end, lo, tArr)
+		if !ns.Equal(start) || !ne.Equal(end) {
+			fixes = append(fixes, fix{pk: pk, start: ns, end: ne})
+		}
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return err
+	}
+	for _, f := range fixes {
+		if _, err := ex.ExecContext(ctx, `UPDATE movements SET started_at=$3, ended_at=$4, duration_min=$5
+			WHERE dataset_id=$1 AND src_pk=$2`,
+			datasetID, f.pk, f.start, f.end, int(f.end.Sub(f.start).Minutes())); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// clampMovementWindow 把一条行程的起止夹进两端到访给出的窗口：
+// lo = 起点到访的离开时间（没有就用到达），hi = 终点到访的到达时间。
+// 任一端的到访缺失（NullTime 无效）就那一侧不夹。
+//
+// 夹完必须 end > start —— 窗口被压得比 1 分钟还窄时把结束推到开始之后 1 分钟：
+// 真机 791/791 条 ZSTART_/ZEND_ 都有值，宁可略微越界也不能写 NULL。
+func clampMovementWindow(start, end time.Time, lo, hi sql.NullTime) (time.Time, time.Time) {
+	if lo.Valid && start.Before(lo.Time) {
+		start = lo.Time
+	}
+	if hi.Valid && end.After(hi.Time) {
+		end = hi.Time
+	}
+	if !end.After(start) {
+		end = start.Add(time.Minute)
+	}
+	return start, end
 }
 
 // sameMinute 比的是本地时区下的「哪一分钟」：表单值是按本地时区解析出来的，
@@ -1714,6 +1797,7 @@ func (s *Server) resolveActivity(ctx context.Context, datasetID int64, raw strin
 // 「建地点 + 建到访」必须落在同一个事务里，这些写方法因此不能写死用连接池。
 type execer interface {
 	ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error)
+	QueryContext(ctx context.Context, query string, args ...any) (*sql.Rows, error)
 	QueryRowContext(ctx context.Context, query string, args ...any) *sql.Row
 }
 

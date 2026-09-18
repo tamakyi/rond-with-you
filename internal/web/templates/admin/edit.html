@@ -270,11 +270,20 @@
                 <form method="post" action="/admin/edit/visit/update" style="margin-top:8px;min-width:300px">
                   <input type="hidden" name="src_pk" value="{{.SrcPK}}">
                   <label class="f"><span>类型</span>
-                    <select name="activity_id">
+                    <select name="activity_id" class="activity-id-inline">
                       <option value="">（无）</option>
                       {{$cur := .ActivityID}}
                       {{range $.Activities}}<option value="{{.ID}}" {{if eq .ID $cur}}selected{{end}}>{{.Name}}</option>{{end}}
+                      <option value="__new__">＋ 新增活动…</option>
                     </select>
+                  </label>
+                  {{/* 选到「＋ 新增活动…」就地展开。输入框不写 name：它不该随表单提交，
+                       选中的活动由 activity_id 带过去。建完由脚本挂到页面所有类型下拉上。 */}}
+                  <label class="f visit-act-new" style="display:none"><span>新建活动</span>
+                    <div class="input-btn">
+                      <input type="text" class="visit-act-name" placeholder="名称">
+                      <button type="button" class="btn visit-act-add">添加</button>
+                    </div>
                   </label>
                   <div class="row">
                     <label class="f" style="flex:1 1 190px"><span>到达时间<b class="req">*</b></span><input type="datetime-local" name="arrival" value="{{.ArrivalStr}}" required></label>
@@ -884,33 +893,111 @@
         upd();
       });
 
-    // ---------- 活动内联新建：创建后即时挂进下拉并选中 ----------
-    function addActivity() {
-      var input = document.getElementById('new-activity-name');
-      var name = input.value.trim();
+    // ---------- 活动内联新建：创建后即时挂进**所有**类型下拉并选中 ----------
+    // 类型下拉在页面上有多处（顶部地点表单 + 每条到访的行内编辑），选项又是服务端渲染的，
+    // 所以建完必须一起挂上——否则在顶部建好、下面那行还得刷新页面才看得到。
+    // 另外 /admin/edit/activity 不做去重，同名会真的建两行，所以先按名字找现成的。
+    function findActivityByName(name) {
+      var found = '';
+      [].forEach.call(document.querySelectorAll('select[name="activity_id"]'), function (s) {
+        if (found) return;
+        [].forEach.call(s.options, function (o) {
+          if (o.value && o.value !== '__new__' && o.textContent === name) found = o.value;
+        });
+      });
+      return found;
+    }
+    function addActivityOption(id, name) {
+      [].forEach.call(document.querySelectorAll('select[name="activity_id"]'), function (s) {
+        var opt = document.createElement('option');
+        opt.value = id;
+        opt.textContent = name;
+        // 插在「＋ 新增活动…」前面，别让新建项落到那个特殊项后面
+        var tail = s.querySelector('option[value="__new__"]');
+        if (tail) s.insertBefore(opt, tail); else s.appendChild(opt);
+      });
+    }
+    function createActivity(name, onDone) {
+      name = (name || '').trim();
       if (!name) return;
+      var exist = findActivityByName(name);
+      if (exist) { onDone(exist); return; }
       fetch('/admin/edit/activity', {
         method: 'POST',
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
         body: 'name=' + encodeURIComponent(name)
       }).then(function (r) { return r.json(); }).then(function (d) {
         if (d.error) { alert(d.error); return; }
-        var sel = document.getElementById('activity-select');
-        var opt = document.createElement('option');
-        opt.value = d.id;
-        opt.textContent = d.name;
-        opt.selected = true;
-        sel.appendChild(opt);
-        input.value = '';
+        addActivityOption(d.id, d.name);
+        onDone(String(d.id));
       }).catch(function (e) { alert('创建活动失败：' + e); });
     }
+
     var actAdd = document.getElementById('activity-add');
     if (actAdd) {
-      actAdd.addEventListener('click', addActivity);
-      document.getElementById('new-activity-name').addEventListener('keydown', function (e) {
-        if (e.key === 'Enter') { e.preventDefault(); addActivity(); }
+      var newActInput = document.getElementById('new-activity-name');
+      var addActivityTop = function () {
+        var sel = document.getElementById('activity-select');
+        createActivity(newActInput.value, function (id) {
+          if (sel) sel.value = id;
+          newActInput.value = '';
+        });
+      };
+      actAdd.addEventListener('click', addActivityTop);
+      newActInput.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter') { e.preventDefault(); addActivityTop(); }
       });
     }
+
+    // ---- 到访行内编辑里的「＋ 新增活动…」：就地展开新建框，建完选中并收起 ----
+    function inlineActParts(el) {
+      var form = el.closest ? el.closest('form') : null;
+      if (!form) return null;
+      var wrap = form.querySelector('.visit-act-new');
+      return { wrap: wrap, input: wrap ? wrap.querySelector('input') : null,
+               sel: form.querySelector('select.activity-id-inline') };
+    }
+    document.addEventListener('change', function (e) {
+      var t = e.target;
+      if (!t || !t.classList || !t.classList.contains('activity-id-inline')) return;
+      var p = inlineActParts(t);
+      if (!p || !p.wrap) return;
+      var on = t.value === '__new__';
+      p.wrap.style.display = on ? '' : 'none';
+      if (on && p.input) p.input.focus();
+    });
+    function inlineActCreate(el) {
+      var p = inlineActParts(el);
+      if (!p) return;
+      createActivity(p.input ? p.input.value : '', function (id) {
+        if (p.sel) p.sel.value = id;
+        if (p.input) p.input.value = '';
+        if (p.wrap) p.wrap.style.display = 'none';
+      });
+    }
+    document.addEventListener('click', function (e) {
+      var t = e.target;
+      if (!t || !t.classList || !t.classList.contains('visit-act-add')) return;
+      inlineActCreate(t);
+    });
+    document.addEventListener('keydown', function (e) {
+      var t = e.target;
+      if (e.key !== 'Enter' || !t || !t.classList || !t.classList.contains('visit-act-name')) return;
+      e.preventDefault();
+      inlineActCreate(t);
+    });
+    // 提交守卫：还停在「＋ 新增活动…」上就拦下来。否则 activity_id 会带着 "__new__" 提交，
+    // resolveActivity 解析不出整数就当成「无」，这条到访的类型会被静默清掉。
+    document.addEventListener('submit', function (e) {
+      var f = e.target;
+      if (!f || !f.querySelector) return;
+      var sel = f.querySelector('select.activity-id-inline');
+      if (sel && sel.value === '__new__') {
+        e.preventDefault();
+        alert('类型选了「＋ 新增活动…」但还没点「添加」：填个名字再点添加，或改回「（无）」。');
+        sel.focus();
+      }
+    }, true);
 
     // ---------- 活动改名 / 删除：作用于下拉里当前选中的那一个 ----------
     function activityPost(path, body, onOK) {

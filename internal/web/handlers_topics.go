@@ -390,7 +390,7 @@ func (s *Server) topicPage(w http.ResponseWriter, r *http.Request) {
 	p.HasMap = true
 	id := atoiOr(r.PathValue("id"), 0)
 	if id <= 0 || p.Dataset == nil {
-		http.NotFound(w, r)
+		s.notFoundPage(w, "这个专题不存在", "地址可能写错了，或者这个专题已经被删掉。")
 		return
 	}
 	var t Topic
@@ -400,16 +400,17 @@ func (s *Server) topicPage(w http.ResponseWriter, r *http.Request) {
 		Scan(&t.ID, &t.Title, &t.Subtitle, &t.Description, &t.StartAt, &t.EndAt,
 			&t.CenterLat, &t.CenterLon, &t.RadiusKm, &t.ShowFog, &t.Enabled, &t.SortOrder)
 	if err == sql.ErrNoRows {
-		http.NotFound(w, r)
+		s.notFoundPage(w, "这个专题不存在", "地址可能写错了，或者这个专题已经被删掉。")
 		return
 	}
 	if err != nil {
 		s.serverError(w, r, err)
 		return
 	}
-	// 未对外展示的专题只有站长能看
+	// 未对外展示的专题只有站长能看。给访客的话术与「不存在」保持一致——
+	// 这里刻意不区分，否则等于告诉访客「这个 ID 存在但你没资格看」。
 	if !t.Enabled && !p.IsAdmin() {
-		http.NotFound(w, r)
+		s.notFoundPage(w, "这个专题不存在", "地址可能写错了，或者这个专题已经被删掉。")
 		return
 	}
 	t.StartDate = t.StartAt.Local().Format(topicDateTimeLayout)

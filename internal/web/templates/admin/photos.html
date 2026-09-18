@@ -11,6 +11,7 @@
 <select id="activity-options" hidden>
   <option value="">未指定</option>
   {{range .Activities}}<option value="{{.ID}}">{{.Name}}</option>{{end}}
+  <option value="__new__">＋ 新增活动…</option>
 </select>
 <select id="tag-options" hidden>
   {{range .Tags}}<option value="{{.ID}}">{{.Name}}</option>{{end}}
@@ -198,6 +199,51 @@
     }
     return sel;
   }
+  // 活动下拉里的「＋ 新增活动…」：选中后就地展开一个新建框，建完把新选项挂到**所有**
+  // 活动下拉上（含隐藏的选项源，之后才解析出来的行也才有它），并在当前这行选中。
+  // 名字已经存在就直接选中，不再新建——/admin/edit/activity 不做去重，同名会真的建两行。
+  function addActivityOption(id, name) {
+    var src = document.getElementById('activity-options');
+    var sels = [].slice.call(document.querySelectorAll('select[name^="activity_"]'));
+    if (src) sels.unshift(src);
+    sels.forEach(function (s) {
+      var opt = document.createElement('option');
+      opt.value = id;
+      opt.textContent = name;
+      // 插在「＋ 新增活动…」前面：不能让新建项落到那个特殊项之后，否则下次它又跑到末尾
+      var tail = s.querySelector('option[value="__new__"]');
+      if (tail) s.insertBefore(opt, tail); else s.appendChild(opt);
+    });
+  }
+  function createActivity(sel, input, wrap) {
+    var name = input.value.trim();
+    if (!name) { input.focus(); return; }
+    var src = document.getElementById('activity-options');
+    var exist = '';
+    if (src) {
+      [].forEach.call(src.options, function (o) {
+        if (o.value !== '__new__' && o.textContent === name) exist = o.value;
+      });
+    }
+    if (exist) {
+      sel.value = exist;
+      input.value = '';
+      wrap.style.display = 'none';
+      return;
+    }
+    fetch('/admin/edit/activity', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: 'name=' + encodeURIComponent(name)
+    }).then(function (r) { return r.json(); }).then(function (d) {
+      if (d.error) { alert(d.error); return; }
+      addActivityOption(d.id, d.name);
+      sel.value = String(d.id);
+      input.value = '';
+      wrap.style.display = 'none';
+    }).catch(function (e) { alert('创建活动失败：' + e); });
+  }
+
   function setVal(name, v) {
     var el = rowsBox.querySelector('input[name="' + name + '"], select[name="' + name + '"]');
     if (el && v) el.value = v;
@@ -343,7 +389,30 @@
     var cap2 = groupCap('到访属性');
     cap2.style.marginTop = '14px';
     td2.appendChild(cap2);
-    row2.appendChild(fieldLabel('活动', makeSelect('activity_' + index, 'activity-options'), 'flex:0 1 170px'));
+    var actSel = makeSelect('activity_' + index, 'activity-options');
+    // 新建活动的输入框不给 name：它不是要随表单提交的字段，选中的活动由 activity_<i> 带过去
+    var actNewInput = tInput('', '', '新活动名称', '');
+    var actNewBtn = document.createElement('button');
+    actNewBtn.type = 'button';
+    actNewBtn.className = 'btn';
+    actNewBtn.textContent = '添加';
+    var actNewBox = document.createElement('div');
+    actNewBox.className = 'input-btn';
+    actNewBox.appendChild(actNewInput);
+    actNewBox.appendChild(actNewBtn);
+    var actNewWrap = fieldLabel('新建活动', actNewBox, 'flex:0 1 190px');
+    actNewWrap.style.display = 'none';
+    actSel.addEventListener('change', function () {
+      var on = actSel.value === '__new__';
+      actNewWrap.style.display = on ? '' : 'none';
+      if (on) actNewInput.focus();
+    });
+    actNewBtn.addEventListener('click', function () { createActivity(actSel, actNewInput, actNewWrap); });
+    actNewInput.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter') { e.preventDefault(); createActivity(actSel, actNewInput, actNewWrap); }
+    });
+    row2.appendChild(fieldLabel('活动', actSel, 'flex:0 1 170px'));
+    row2.appendChild(actNewWrap);
     // 备注不设 flex-grow：让它自己那么宽就行，否则会被拉伸到最右，把「标记为收藏」挤出视野
     row2.appendChild(fieldLabel('备注', tInput('remark_' + index, '', '可选', '200px'), 'flex:0 1 260px'));
     var favWrap = document.createElement('label');
@@ -684,6 +753,17 @@
   var submitBtn = form.querySelector('button[type=submit]');
   form.addEventListener('submit', function (e) {
     if (form.dataset.ready === '1') return; // 放行那一趟
+    // 选了「＋ 新增活动…」却没点「添加」的：拦下来。否则 activity_<i> 会带着 "__new__"
+    // 提交，服务端解析不出整数就当成「未指定」，这行活动会静默丢掉。
+    var unresolved = [].slice.call(rowsBox.querySelectorAll('select[name^="activity_"]'))
+      .filter(function (s) { return s.value === '__new__'; });
+    if (unresolved.length) {
+      e.preventDefault();
+      alert('有 ' + unresolved.length + ' 行的活动选了「＋ 新增活动…」但还没点「添加」：'
+        + '填个名字再点添加，或者把它改回「未指定」。');
+      unresolved[0].focus();
+      return;
+    }
     var picked = [];
     rowsBox.querySelectorAll('input[name^=keepimg_]').forEach(function (cb) {
       if (!cb.checked) return;

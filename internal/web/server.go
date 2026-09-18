@@ -276,6 +276,14 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("GET /admin/password", s.requireAdmin(s.passwordPage))
 	s.mux.HandleFunc("POST /admin/password", s.requireAdmin(s.passwordSubmit))
 	s.mux.HandleFunc("POST /admin/username", s.requireAdmin(s.usernameSubmit))
+
+	// 兜底：没匹配上任何路由的地址（打错的链接、爬虫乱扫）也给站点样式的中间页。
+	// 不注册这条的话走的是 ServeMux 默认响应，白底一行 `404 page not found`，看着像站点坏了。
+	// 更具体的模式优先级更高，所以静态资源、瓦片、图片这些不受影响；
+	// 瓦片/图片那几处仍然保留纯文本 404 —— 那些是给浏览器和爬虫取的资源，不是给人看的页面。
+	s.mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		s.notFoundPage(w, "", "")
+	})
 }
 
 // ---------- 中间件 ----------
